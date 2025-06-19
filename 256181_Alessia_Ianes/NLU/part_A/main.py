@@ -14,15 +14,11 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import pandas as pd  # for DataFrame
 
 
 
 if __name__ == "__main__":
-    #Wrtite the code to load the datasets and to run your functions
-    # Print the results
-    # Global variables
-    
-
     # First we get the 10% of the training set, then we compute the percentage of these examples 
 
     portion = 0.10
@@ -79,82 +75,133 @@ if __name__ == "__main__":
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
+    hid_size_values = [300] # Hidden size
+    emb_size = 300
+    batch_size_values = [128] # Batch size
 
-    # Dataloader instantiations
-train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=collate_fn,  shuffle=True)
-dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=collate_fn)
-test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=collate_fn)
+    lr_values = [0.0001, 0.0003, 0.0005, 0.001] # learning rate
+    clip = 5 # Clip the gradient
 
-hid_size = 200
-emb_size = 300
+    out_slot = len(lang.slot2id)
+    out_int = len(lang.intent2id)
+    vocab_len = len(lang.word2id)
 
-lr = 0.0001 # learning rate
-clip = 5 # Clip the gradient
+    # Create a directory to save the results, if it doesn't exist
+    os.makedirs('results/LSTM_baseline/plots', exist_ok=True)
+    #os.makedirs('bin/LSTM_dropout_ADAM', exist_ok=True)
 
-out_slot = len(lang.slot2id)
-out_int = len(lang.intent2id)
-vocab_len = len(lang.word2id)
+    for lr in lr_values:
+        for hid_size in hid_size_values:
+            for bs in batch_size_values:
 
-model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
-model.apply(init_weights)
+                # Dataloader instantiations
+                train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=collate_fn,  shuffle=True)
+                dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=collate_fn)
+                test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=collate_fn)
 
-optimizer = optim.Adam(model.parameters(), lr=lr)
-criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
+                model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
+                model.apply(init_weights)
 
-
-n_epochs = 200
-patience = 3
-losses_train = []
-losses_dev = []
-sampled_epochs = []
-best_f1 = 0
-for x in tqdm(range(1,n_epochs)):
-    loss = train_loop(train_loader, optimizer, criterion_slots, 
-                      criterion_intents, model, clip=clip)
-    if x % 5 == 0: # We check the performance every 5 epochs
-        sampled_epochs.append(x)
-        losses_train.append(np.asarray(loss).mean())
-        results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                      criterion_intents, model, lang)
-        losses_dev.append(np.asarray(loss_dev).mean())
-        
-        f1 = results_dev['total']['f']
-        # For decreasing the patience you can also use the average between slot f1 and intent accuracy
-        if f1 > best_f1:
-            best_f1 = f1
-            # Here you should save the model
-            patience = 3
-        else:
-            patience -= 1
-        if patience <= 0: # Early stopping with patience
-            break # Not nice but it keeps the code clean
-
-results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
-                                         criterion_intents, model, lang)    
-print('Slot F1: ', results_test['total']['f'])
-print('Intent Accuracy:', intent_test['accuracy'])
+                optimizer = optim.Adam(model.parameters(), lr=lr)
+                criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+                criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
 
 
-# PATH = os.path.join("bin", model_name)
-# saving_object = {"epoch": x, 
-#                  "model": model.state_dict(), 
-#                  "optimizer": optimizer.state_dict(), 
-#                  "w2id": w2id, 
-#                  "slot2id": slot2id, 
-#                  "intent2id": intent2id}
-# torch.save(saving_object, PATH)
+                n_epochs = 200
+                patience = 3
+                losses_train = []
+                losses_dev = []
+                sampled_epochs = []
+                f1 = []
+                accuracy = []
+                best_f1 = 0
+                for x in tqdm(range(1,n_epochs)):
+                    loss = train_loop(train_loader, optimizer, criterion_slots, 
+                                    criterion_intents, model, clip=clip)
+                    if x % 5 == 0: # We check the performance every 5 epochs
+                        sampled_epochs.append(x)
+                        losses_train.append(np.asarray(loss).mean())
+                        results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
+                                                                    criterion_intents, model, lang)
+                        losses_dev.append(np.asarray(loss_dev).mean())
+                        
+                        
+                        f1.append(results_dev['total']['f'])
+                        accuracy.append(intent_res['accuracy'])
+                        # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+                        if f1[-1] > best_f1:
+                            best_f1 = f1[-1]
+                            # Here you should save the model
+                            patience = 3
+                        else:
+                            patience -= 1
+                        if patience <= 0: # Early stopping with patience
+                            break # Not nice but it keeps the code clean
+
+                results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
+                                                        criterion_intents, model, lang)    
+                print('Slot F1: ', results_test['total']['f'])
+                print('Intent Accuracy:', intent_test['accuracy'])
 
 
-#PLOT OF THE TRAIN AND VALID LOSSES
-plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
-plt.title('Train and Dev Losses')
-plt.ylabel('Loss')
-plt.xlabel('Epochs')
-plt.plot(sampled_epochs, losses_train, label='Train loss')
-plt.plot(sampled_epochs, losses_dev, label='Dev loss')
-plt.legend()
-plt.show()
+                # PATH = os.path.join("bin", model_name)
+                # saving_object = {"epoch": x, 
+                #                  "model": model.state_dict(), 
+                #                  "optimizer": optimizer.state_dict(), 
+                #                  "w2id": w2id, 
+                #                  "slot2id": slot2id, 
+                #                  "intent2id": intent2id}
+                # torch.save(saving_object, PATH)
+
+                # Save the results in a CSV file
+                results_df = pd.DataFrame({
+                    'Epoch': sampled_epochs,
+                    'F1 dev': f1,
+                    'Acc dev': accuracy,
+                    'F1 test': results_test['total']['f'] * len(sampled_epochs),
+                    'Acc test': intent_test['accuracy'] * len(sampled_epochs)
+                })
+                csv_filename = f'results/LSTM_baseline/LSTM_baseline_lr_{lr}_bs_{bs}_hid_{hid_size}.csv'
+                results_df.to_csv(csv_filename, index=False)
+                print(f'CSV file successfully saved in {csv_filename}')
 
 
-#REMEMBER TO RUN THE BEST MODEL MULTIPLE TIMES
+                # Create ppl_dev plot
+                plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
+                plt.title('Accuracy and F1 Score on Dev Set')
+                plt.ylabel('Accuracy / F1 Score')
+                plt.xlabel('Epochs')
+                plt.plot(sampled_epochs, f1, label='F1 Score on Dev Set')
+                plt.plot(sampled_epochs, accuracy, label='Accuracy on Dev Set')
+                plt.legend()
+                plt.xlim(min(sampled_epochs), max(sampled_epochs))
+                plt.ylim(0.0, 1.0)  #lim for accuracy/F1
+                plt.show()
+
+                # Save ppl_dev plot
+                res_plot_filename = f'results/LSTM_baseline/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+                plt.savefig(res_plot_filename)
+                print(f"F1 and Accuracy plot saved: '{res_plot_filename}'")
+
+    
+
+
+                #PLOT OF THE TRAIN AND VALID LOSSES
+                plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
+                plt.title('Train and Dev Losses')
+                plt.ylabel('Loss')
+                plt.xlabel('Epochs')
+                plt.plot(sampled_epochs, losses_train, label='Train loss')
+                plt.plot(sampled_epochs, losses_dev, label='Dev loss')
+                plt.legend()
+                plt.xlim(min(sampled_epochs), max(sampled_epochs))
+                plt.ylim(0.0, 10.0)  #lim for loss
+                plt.show()
+
+                # Save ppl_dev plot
+                loss_plot_filename = f'results/LSTM_baseline/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+                plt.savefig(loss_plot_filename)
+                print(f"Loss plot saved: '{loss_plot_filename}'")
+
+
+    #REMEMBER TO RUN THE BEST MODEL MULTIPLE TIMES
