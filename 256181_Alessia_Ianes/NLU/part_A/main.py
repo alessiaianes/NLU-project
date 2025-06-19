@@ -90,10 +90,16 @@ if __name__ == "__main__":
     os.makedirs('results/LSTM_bi/plots', exist_ok=True)
     #os.makedirs('bin/LSTM_dropout_ADAM', exist_ok=True)
     all_results = [] # To store the results of each configuration
+    total_configurations = len(lr_values) * len(hid_size_values) * len(batch_size_values)
+    current_configuration = 0
 
     for lr in lr_values:
         for hid_size in hid_size_values:
             for bs in batch_size_values:
+                print("=" * 89)
+                print(f"Starting run #{current_configuration + 1} of {total_configurations}")
+                print("=" * 89)
+                print(f"Running configuration: LR={lr}, Hid Size={hid_size}, Batch Size={bs}")
 
                 # Dataloader instantiations
                 train_loader = DataLoader(train_dataset, batch_size=bs, collate_fn=collate_fn,  shuffle=True)
@@ -138,6 +144,11 @@ if __name__ == "__main__":
                             patience -= 1
                         if patience <= 0: # Early stopping with patience
                             break # Not nice but it keeps the code clean
+
+                print(f"Ending run #{current_configuration + 1} of {total_configurations}")
+                print("=" * 89)
+                current_configuration += 1
+                print("=" * 89)
 
                 results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
                                                         criterion_intents, model, lang)    
