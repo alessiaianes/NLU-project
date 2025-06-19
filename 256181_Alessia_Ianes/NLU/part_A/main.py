@@ -96,9 +96,9 @@ if __name__ == "__main__":
             for bs in batch_size_values:
 
                 # Dataloader instantiations
-                train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=collate_fn,  shuffle=True)
-                dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=collate_fn)
-                test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=collate_fn)
+                train_loader = DataLoader(train_dataset, batch_size=bs, collate_fn=collate_fn,  shuffle=True)
+                dev_loader = DataLoader(dev_dataset, batch_size=bs//2, collate_fn=collate_fn)
+                test_loader = DataLoader(test_dataset, batch_size=bs//2, collate_fn=collate_fn)
 
                 model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
                 model.apply(init_weights)
@@ -184,7 +184,7 @@ if __name__ == "__main__":
                 plt.plot(sampled_epochs, accuracy, label='Accuracy on Dev Set')
                 plt.legend()
                 plt.xlim(min(sampled_epochs), max(sampled_epochs))
-                plt.ylim(0.0, 3.0)  #lim for accuracy/F1
+                plt.ylim(0.0, 1.0)  #lim for accuracy/F1
                 #plt.show()
 
                 # Save ppl_dev plot
