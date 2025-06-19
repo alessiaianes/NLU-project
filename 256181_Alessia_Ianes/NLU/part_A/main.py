@@ -48,17 +48,17 @@ if __name__ == "__main__":
     y_test = [x['intent'] for x in test_raw]
 
     # Intent distributions
-    print('Train:')
-    pprint({k:round(v/len(y_train),3)*100 for k, v in sorted(Counter(y_train).items())})
-    print('Dev:'), 
-    pprint({k:round(v/len(y_dev),3)*100 for k, v in sorted(Counter(y_dev).items())})
-    print('Test:') 
-    pprint({k:round(v/len(y_test),3)*100 for k, v in sorted(Counter(y_test).items())})
-    print('='*89)
+    # print('Train:')
+    # pprint({k:round(v/len(y_train),3)*100 for k, v in sorted(Counter(y_train).items())})
+    # print('Dev:'), 
+    # pprint({k:round(v/len(y_dev),3)*100 for k, v in sorted(Counter(y_dev).items())})
+    # print('Test:') 
+    # pprint({k:round(v/len(y_test),3)*100 for k, v in sorted(Counter(y_test).items())})
+    # print('='*89)
     # Dataset size
-    print('TRAIN size:', len(train_raw))
-    print('DEV size:', len(dev_raw))
-    print('TEST size:', len(test_raw))
+    # print('TRAIN size:', len(train_raw))
+    # print('DEV size:', len(dev_raw))
+    # print('TEST size:', len(test_raw))
 
 
     words = sum([x['utterance'].split() for x in train_raw], []) # No set() since we want to compute 
@@ -89,6 +89,7 @@ if __name__ == "__main__":
     # Create a directory to save the results, if it doesn't exist
     os.makedirs('results/LSTM_baseline/plots', exist_ok=True)
     #os.makedirs('bin/LSTM_dropout_ADAM', exist_ok=True)
+    all_results = [] # To store the results of each configuration
 
     for lr in lr_values:
         for hid_size in hid_size_values:
@@ -143,6 +144,14 @@ if __name__ == "__main__":
                 print('Slot F1: ', results_test['total']['f'])
                 print('Intent Accuracy:', intent_test['accuracy'])
 
+                all_results.append({
+                        'Batch Size': bs,
+                        'Learning Rate': lr,
+                        'Hid size': hid_size,
+                        'F1 score dev': max(f1),
+                        'Accuracy dev': max(accuracy)
+                    })
+
 
                 # PATH = os.path.join("bin", model_name)
                 # saving_object = {"epoch": x, 
@@ -158,8 +167,8 @@ if __name__ == "__main__":
                     'Epoch': sampled_epochs,
                     'F1 dev': f1,
                     'Acc dev': accuracy,
-                    'F1 test': results_test['total']['f'] * len(sampled_epochs),
-                    'Acc test': intent_test['accuracy'] * len(sampled_epochs)
+                    'F1 test': [results_test['total']['f']] * len(sampled_epochs),
+                    'Acc test': [intent_test['accuracy']] * len(sampled_epochs)
                 })
                 csv_filename = f'results/LSTM_baseline/LSTM_baseline_lr_{lr}_bs_{bs}_hid_{hid_size}.csv'
                 results_df.to_csv(csv_filename, index=False)
@@ -202,6 +211,17 @@ if __name__ == "__main__":
                 loss_plot_filename = f'results/LSTM_baseline/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
                 plt.savefig(loss_plot_filename)
                 print(f"Loss plot saved: '{loss_plot_filename}'")
+
+    # After the loops, find the best configuration:
+    best_result_f1 = max(all_results, key=lambda x: x['F1 score dev'])
+    best_result_acc = max(all_results, key=lambda x: x['Accuracy dev'])
+    print(f"Best configuration f1: {best_result_f1}")
+    print(f"Best configuration acc: {best_result_acc}")
+    best_result_df_f1 = pd.DataFrame([best_result_f1])
+    best_result_df_acc = pd.DataFrame([best_result_acc])
+    best_result_df_f1.to_csv('results/LSTM_baseline/best_configuration_f1.csv', index=False)
+    best_result_df_acc.to_csv('results/LSTM_baseline/best_configuration_acc.csv', index=False)
+    print(f'Best configuration successfully saved')
 
 
     #REMEMBER TO RUN THE BEST MODEL MULTIPLE TIMES

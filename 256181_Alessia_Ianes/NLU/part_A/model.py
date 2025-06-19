@@ -19,8 +19,8 @@ class ModelIAS(nn.Module):
         # Since bidirectional LSTM output is 2 * hid_size,
         # linear layers that recieves this output should have a corresponding input size.
  
-        self.slot_out = nn.Linear(hid_size * 2, out_slot)
-        self.intent_out = nn.Linear(hid_size * 2, out_int)
+        self.slot_out = nn.Linear(hid_size, out_slot)
+        self.intent_out = nn.Linear(hid_size, out_int)
         # Dropout layer How/Where do we apply it?
         self.dropout = nn.Dropout(0.1)
         
@@ -43,7 +43,8 @@ class ModelIAS(nn.Module):
         # last_hidden[0,:,:] for the forward direction of the last layer
         # last_hidden[1,:,:] for the backward direction of the last layer
         # We need to concatenate these two to obtain a single vector that represents the entire utterance for the intent.
-        last_hidden =  torch.cat((last_hidden[-2,:,:], last_hidden[-1,:,:]), dim=1)
+        #last_hidden =  torch.cat((last_hidden[-2,:,:], last_hidden[-1,:,:]), dim=1)
+        last_hidden = last_hidden[-1,:,:]
         
         # Is this another possible way to get the last hiddent state? (Why?)
         # utt_encoded.permute(1,0,2)[-1]
