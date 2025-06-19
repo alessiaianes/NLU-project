@@ -75,9 +75,9 @@ if __name__ == "__main__":
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
-    hid_size_values = [300] # Hidden size
+    hid_size_values = [100, 200, 300] # Hidden size
     emb_size = 300
-    batch_size_values = [128] # Batch size
+    batch_size_values = [32, 64, 128, 256] # Batch size
 
     lr_values = [0.0001, 0.0003, 0.0005, 0.001] # learning rate
     clip = 5 # Clip the gradient
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     vocab_len = len(lang.word2id)
 
     # Create a directory to save the results, if it doesn't exist
-    os.makedirs('results/LSTM_baseline/plots', exist_ok=True)
+    os.makedirs('results/LSTM_bi/plots', exist_ok=True)
     #os.makedirs('bin/LSTM_dropout_ADAM', exist_ok=True)
     all_results = [] # To store the results of each configuration
 
@@ -170,7 +170,7 @@ if __name__ == "__main__":
                     'F1 test': [results_test['total']['f']] * len(sampled_epochs),
                     'Acc test': [intent_test['accuracy']] * len(sampled_epochs)
                 })
-                csv_filename = f'results/LSTM_baseline/LSTM_baseline_lr_{lr}_bs_{bs}_hid_{hid_size}.csv'
+                csv_filename = f'results/LSTM_bi/LSTM_bi_lr_{lr}_bs_{bs}_hid_{hid_size}.csv'
                 results_df.to_csv(csv_filename, index=False)
                 print(f'CSV file successfully saved in {csv_filename}')
 
@@ -188,7 +188,7 @@ if __name__ == "__main__":
                 #plt.show()
 
                 # Save ppl_dev plot
-                res_plot_filename = f'results/LSTM_baseline/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+                res_plot_filename = f'results/LSTM_bi/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
                 plt.savefig(res_plot_filename)
                 print(f"F1 and Accuracy plot saved: '{res_plot_filename}'")
                 plt.close()
@@ -209,7 +209,7 @@ if __name__ == "__main__":
                 #plt.show()
 
                 # Save ppl_dev plot
-                loss_plot_filename = f'results/LSTM_baseline/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+                loss_plot_filename = f'results/LSTM_bi/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
                 plt.savefig(loss_plot_filename)
                 print(f"Loss plot saved: '{loss_plot_filename}'")
                 plt.close()
@@ -221,8 +221,8 @@ if __name__ == "__main__":
     print(f"Best configuration acc: {best_result_acc}")
     best_result_df_f1 = pd.DataFrame([best_result_f1])
     best_result_df_acc = pd.DataFrame([best_result_acc])
-    best_result_df_f1.to_csv('results/LSTM_baseline/best_configuration_f1.csv', index=False)
-    best_result_df_acc.to_csv('results/LSTM_baseline/best_configuration_acc.csv', index=False)
+    best_result_df_f1.to_csv('results/LSTM_bi/best_configuration_f1.csv', index=False)
+    best_result_df_acc.to_csv('results/LSTM_bi/best_configuration_acc.csv', index=False)
     print(f'Best configuration successfully saved')
 
 
