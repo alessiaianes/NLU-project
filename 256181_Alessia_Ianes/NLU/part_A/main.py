@@ -184,14 +184,14 @@ if __name__ == "__main__":
                 plt.plot(sampled_epochs, accuracy, label='Accuracy on Dev Set')
                 plt.legend()
                 plt.xlim(min(sampled_epochs), max(sampled_epochs))
-                plt.ylim(0.0, 1.0)  #lim for accuracy/F1
+                plt.ylim(0.0, 3.0)  #lim for accuracy/F1
                 #plt.show()
 
                 # Save ppl_dev plot
                 res_plot_filename = f'results/LSTM_baseline/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
                 plt.savefig(res_plot_filename)
                 print(f"F1 and Accuracy plot saved: '{res_plot_filename}'")
-                plt.close
+                plt.close()
 
     
 
@@ -205,7 +205,7 @@ if __name__ == "__main__":
                 plt.plot(sampled_epochs, losses_dev, label='Dev loss')
                 plt.legend()
                 plt.xlim(min(sampled_epochs), max(sampled_epochs))
-                plt.ylim(0.0, 10.0)  #lim for loss
+                plt.ylim(0.0, 2.5)  #lim for loss
                 #plt.show()
 
                 # Save ppl_dev plot
