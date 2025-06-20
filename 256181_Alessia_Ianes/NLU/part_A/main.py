@@ -75,9 +75,9 @@ if __name__ == "__main__":
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
-    hid_size_values = [100, 200, 300] # Hidden size
+    hid_size_values = [300, 200] # Hidden size
     emb_size = 300
-    batch_size_values = [32, 64, 128, 256] # Batch size
+    batch_size_values = [128, 64, 32] # Batch size
     dropout_values = [0.1, 0.2, 0.3, 0.4] # Dropout values
 
     lr_values = [0.0001, 0.0005, 0.0007, 0.0009, 0.001] # learning rate
@@ -91,17 +91,17 @@ if __name__ == "__main__":
     os.makedirs('results/LSTM_drop/plots', exist_ok=True)
     #os.makedirs('bin/LSTM_dropout_ADAM', exist_ok=True)
     all_results = [] # To store the results of each configuration
-    total_configurations = len(lr_values) * len(hid_size_values) * len(batch_size_values)
+    total_configurations = len(lr_values) * len(hid_size_values) * len(batch_size_values) * len(dropout_values)
     current_configuration = 0
 
-    for lr in lr_values:
-        for hid_size in hid_size_values:
-            for bs in batch_size_values:
-                for d in dropout_values:
+    for hid_size in hid_size_values:
+        for bs in batch_size_values:
+            for d in dropout_values:
+                for lr in lr_values:
                     print("=" * 89)
                     print(f"Starting run #{current_configuration + 1} of {total_configurations}")
                     print("=" * 89)
-                    print(f"Running configuration: LR={lr}, Hid Size={hid_size}, Batch Size={bs}")
+                    print(f"Running configuration: lr={lr}, Hid Size={hid_size}, Batch Size={bs}, Dropout={d}")
 
                     # Dataloader instantiations
                     train_loader = DataLoader(train_dataset, batch_size=bs, collate_fn=collate_fn,  shuffle=True)
@@ -147,10 +147,7 @@ if __name__ == "__main__":
                             if patience <= 0: # Early stopping with patience
                                 break # Not nice but it keeps the code clean
 
-                    print(f"Ending run #{current_configuration + 1} of {total_configurations}")
-                    print("=" * 89)
-                    current_configuration += 1
-                    print("=" * 89)
+                    
 
                     results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
                                                             criterion_intents, model, lang)    
@@ -161,6 +158,7 @@ if __name__ == "__main__":
                             'Batch Size': bs,
                             'Learning Rate': lr,
                             'Hid size': hid_size,
+                            'Dropout': d,
                             'F1 score dev': max(f1),
                             'Accuracy dev': max(accuracy)
                         })
@@ -183,7 +181,7 @@ if __name__ == "__main__":
                         'F1 test': [results_test['total']['f']] * len(sampled_epochs),
                         'Acc test': [intent_test['accuracy']] * len(sampled_epochs)
                     })
-                    csv_filename = f'results/LSTM_drop/LSTM_drop_lr_{lr}_bs_{bs}_hid_{hid_size}.csv'
+                    csv_filename = f'results/LSTM_drop/LSTM_drop_lr_{lr}_bs_{bs}_hid_{hid_size}_dropout_{d}.csv'
                     results_df.to_csv(csv_filename, index=False)
                     print(f'CSV file successfully saved in {csv_filename}')
 
@@ -201,7 +199,7 @@ if __name__ == "__main__":
                     #plt.show()
 
                     # Save ppl_dev plot
-                    res_plot_filename = f'results/LSTM_drop/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+                    res_plot_filename = f'results/LSTM_drop/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}_dropout_{d}.png'
                     plt.savefig(res_plot_filename)
                     print(f"F1 and Accuracy plot saved: '{res_plot_filename}'")
                     plt.close()
@@ -222,10 +220,15 @@ if __name__ == "__main__":
                     #plt.show()
 
                     # Save ppl_dev plot
-                    loss_plot_filename = f'results/LSTM_drop/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+                    loss_plot_filename = f'results/LSTM_drop/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}_dropout_{d}.png'
                     plt.savefig(loss_plot_filename)
                     print(f"Loss plot saved: '{loss_plot_filename}'")
                     plt.close()
+
+                    print(f"Ending run #{current_configuration + 1} of {total_configurations}")
+                    print("=" * 89)
+                    current_configuration += 1
+                    print("=" * 89)
 
     # After the loops, find the best configuration:
     best_result_f1 = max(all_results, key=lambda x: x['F1 score dev'])
