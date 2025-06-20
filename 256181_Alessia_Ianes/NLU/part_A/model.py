@@ -4,7 +4,7 @@ import torch
 
 class ModelIAS(nn.Module):
 
-    def __init__(self, hid_size, out_slot, out_int, emb_size, vocab_len, n_layer=1, pad_index=0):
+    def __init__(self, hid_size, out_slot, out_int, emb_size, vocab_len, n_layer=1, pad_index=0, dropout=0.1):
         super(ModelIAS, self).__init__()
         # hid_size = Hidden size
         # out_slot = number of slots (output size for slot filling)
@@ -22,11 +22,15 @@ class ModelIAS(nn.Module):
         self.slot_out = nn.Linear(hid_size * 2, out_slot)
         self.intent_out = nn.Linear(hid_size * 2, out_int)
         # Dropout layer How/Where do we apply it?
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(dropout)
         
     def forward(self, utterance, seq_lengths):
         # utterance.size() = batch_size X seq_len
         utt_emb = self.embedding(utterance) # utt_emb.size() = batch_size X seq_len X emb_size
+
+        # Apply dropout to embeddings
+        # Apply dropout here helps to prevent overfitting on the embeddings themselves.
+        utt_emb = self.dropout(utt_emb) # utt_emb.size() = batch_size X seq_len X emb_size
         
         # pack_padded_sequence avoid computation over pad tokens reducing the computational cost
         
@@ -36,6 +40,12 @@ class ModelIAS(nn.Module):
        
         # Unpack the sequence
         utt_encoded, input_sizes = pad_packed_sequence(packed_output, batch_first=True)
+
+        # Apply dropout to the output of the LSTM
+        # This is a common and effective place to apply dropout in RNNs,
+        # regularizing the output before it is passed to the slot classifier.
+        utt_encoded = self.dropout(utt_encoded)
+
         # Get the last hidden state
         # Obtain the correct last hidden state for a bidirectional LSTM
         # For a bidirectional LSTM, `last_hidden` has the shape (num_layers * num_directions, batch_size, hidden_size).
@@ -44,7 +54,11 @@ class ModelIAS(nn.Module):
         # last_hidden[1,:,:] for the backward direction of the last layer
         # We need to concatenate these two to obtain a single vector that represents the entire utterance for the intent.
         last_hidden =  torch.cat((last_hidden[-2,:,:], last_hidden[-1,:,:]), dim=1)
-        
+
+        # Apply dropout to the last hidden state
+        # This is done to regularize the final representation before it is passed to the intent classifier..
+        last_hidden = self.dropout(last_hidden)
+
         # Is this another possible way to get the last hiddent state? (Why?)
         # utt_encoded.permute(1,0,2)[-1]
         
