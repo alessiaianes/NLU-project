@@ -45,7 +45,7 @@ class IntentsAndSlotsBERT(data.Dataset):
         self.intents = []
         self.slots = []
         self.lang = lang
-        
+
         for x in dataset:
             self.utterances.append(x['utterance'])
             self.slots.append(x['slots'])
@@ -78,39 +78,39 @@ class IntentsAndSlotsBERT(data.Dataset):
         bert_slot_ids = [self.lang.slot2id.get(slot, PAD_TOKEN) for slot in bert_slot_labels]
         return bert_slot_ids
     
-def collate_fn_bert(data):
-    def merge(sequences):
-        '''
-        merge from batch * sent_len to batch * max_len 
-        '''
-        lengths = [len(seq) for seq in sequences]
-        max_len = 1 if max(lengths)==0 else max(lengths)
-        # Pad token is zero in our case
-        # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape 
-        # batch_size X maximum length of a sequence
-        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
-        for i, seq in enumerate(sequences):
-            end = lengths[i]
-            padded_seqs[i, :end] = seq # We copy each sequence into the matrix
-        # print(padded_seqs)
-        padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
-        return padded_seqs, lengths
+# def collate_fn_bert(data):
+#     def merge(sequences):
+#         '''
+#         merge from batch * sent_len to batch * max_len 
+#         '''
+#         lengths = [len(seq) for seq in sequences]
+#         max_len = 1 if max(lengths)==0 else max(lengths)
+#         # Pad token is zero in our case
+#         # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape 
+#         # batch_size X maximum length of a sequence
+#         padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
+#         for i, seq in enumerate(sequences):
+#             end = lengths[i]
+#             padded_seqs[i, :end] = seq # We copy each sequence into the matrix
+#         # print(padded_seqs)
+#         padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
+#         return padded_seqs, lengths
 
-    # Sort data by seq lengths
-    data.sort(key=lambda x: len(x['utterance']), reverse=True) 
-    new_item = {}
-    for key in data[0].keys():
-        new_item[key] = [d[key] for d in data]
-    # We just need one length for packed pad seq, since len(utt) == len(slots)
-    src_utt, _ = merge(new_item['utterance'])
-    y_slots, _ = merge(new_item["slots"])
-    intent = torch.LongTensor(new_item["intent"])
-    src_utt = src_utt.to(device) # We load the Tensor on our selected device
-    y_slots = y_slots.to(device)
-    intent = intent.to(device)
-    attention_mask = (src_utt != PAD_TOKEN).long().to(device)
-    new_item["utterance"] = src_utt
-    new_item["intent"] = intent
-    new_item["slots"] = y_slots
-    new_item["attention_mask"] = attention_mask
-    return new_item
+#     # Sort data by seq lengths
+#     data.sort(key=lambda x: len(x['utterance']), reverse=True) 
+#     new_item = {}
+#     for key in data[0].keys():
+#         new_item[key] = [d[key] for d in data]
+#     # We just need one length for packed pad seq, since len(utt) == len(slots)
+#     src_utt, _ = merge(new_item['utterance'])
+#     y_slots, _ = merge(new_item["slots"])
+#     intent = torch.LongTensor(new_item["intent"])
+#     src_utt = src_utt.to(device) # We load the Tensor on our selected device
+#     y_slots = y_slots.to(device)
+#     intent = intent.to(device)
+#     attention_mask = (src_utt != PAD_TOKEN).long().to(device)
+#     new_item["utterance"] = src_utt
+#     new_item["intent"] = intent
+#     new_item["slots"] = y_slots
+#     new_item["attention_mask"] = attention_mask
+#     return new_item
