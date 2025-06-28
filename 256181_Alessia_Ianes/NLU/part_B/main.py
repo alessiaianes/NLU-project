@@ -259,8 +259,8 @@ if __name__ == "__main__":
     # --- Hyperparameter Search Setup ---
     hid_size_values = [300, 200] # Example hidden sizes
     emb_size = 300 # Embedding size (might be fixed by BERT model, e.g., 768)
-    batch_size_values = [16, 32] # Reduced batch sizes for potentially faster testing
-    dropout_values = [0.1, 0.3] # Example dropout values
+    batch_size_values = [128, 64, 32] # Reduced batch sizes for potentially faster testing
+    dropout_values = [0.1, 0.2, 0.3, 0.4] # Example dropout values
     lr_values = [0.00005, 0.00007, 0.00009] # Lower learning rates often work better with Adam/BERT
     clip = 5 # Gradient clipping value
     
@@ -305,7 +305,7 @@ if __name__ == "__main__":
                     criterion_intents = nn.CrossEntropyLoss()
 
                     # Training Parameters
-                    n_epochs = 5 # Reduced epochs for quicker testing; increase for full run (e.g., 50 or 100)
+                    n_epochs = 50 # Reduced epochs for quicker testing; increase for full run (e.g., 50 or 100)
                     patience = 3 # Early stopping patience
                     patience_counter = 0
                     
@@ -317,39 +317,44 @@ if __name__ == "__main__":
                     best_f1_dev = 0.0     # Track best F1 score on dev set
 
                     print(f"Starting training for {n_epochs} epochs...")
-                    for epoch in range(1, n_epochs + 1):
+                    epoch_progress_bar = tqdm(range(1, n_epochs + 1)) 
+                    for epoch in epoch_progress_bar:
                         # Train for one epoch
                         avg_loss_train = train_loop(train_loader, optimizer, criterion_slots, criterion_intents, model, clip=clip)
                         
                         # Evaluate every N epochs (e.g., every epoch or every 5 epochs)
-                        if epoch % 1 == 0: # Check performance every epoch for more detail
-                            sampled_epochs.append(epoch)
-                            losses_train_avg.append(avg_loss_train)
-                            
-                            # Evaluate on Dev set
-                            results_dev, intent_res_dev, avg_loss_dev = eval_loop(dev_loader, criterion_slots, criterion_intents, model, lang)
-                            
-                            current_f1_dev = results_dev.get('total', {}).get('f', 0.0) # Safely get F1 score
-                            current_acc_dev = intent_res_dev.get('accuracy', 0.0) # Safely get accuracy
-                            
-                            losses_dev_avg.append(avg_loss_dev)
-                            f1_scores_dev.append(current_f1_dev)
-                            accuracies_dev.append(current_acc_dev)
+                        #if epoch % 1 == 0: # Check performance every epoch for more detail
+                        sampled_epochs.append(epoch)
+                        losses_train_avg.append(avg_loss_train)
+                        
+                        # Evaluate on Dev set
+                        results_dev, intent_res_dev, avg_loss_dev = eval_loop(dev_loader, criterion_slots, criterion_intents, model, lang)
+                        
+                        current_f1_dev = results_dev.get('total', {}).get('f', 0.0) # Safely get F1 score
+                        current_acc_dev = intent_res_dev.get('accuracy', 0.0) # Safely get accuracy
+                        
+                        losses_dev_avg.append(avg_loss_dev)
+                        f1_scores_dev.append(current_f1_dev)
+                        accuracies_dev.append(current_acc_dev)
 
-                            print(f"Epoch {epoch}: Train Loss={avg_loss_train:.4f}, Dev Loss={avg_loss_dev:.4f}, Dev F1={current_f1_dev:.4f}, Dev Acc={current_acc_dev:.4f}")
+                        epoch_progress_bar.set_postfix({
+                            'Epoch': epoch, 
+                            'Dev_F1': f'{current_f1_dev:.4f}', 
+                            'Dev_Acc': f'{current_acc_dev:.4f}'
+                        })
 
-                            # Early stopping check
-                            if current_f1_dev > best_f1_dev:
-                                best_f1_dev = current_f1_dev
-                                patience_counter = 0
-                                # Optionally save the best model based on dev F1 score
-                                # torch.save(model.state_dict(), f"{results_dir}/best_model_f1_config_{current_configuration}.pt")
-                            else:
-                                patience_counter += 1
-                            
-                            if patience_counter >= patience:
-                                print(f"Early stopping triggered after {epoch} epochs.")
-                                break # Exit epoch loop
+                        # Early stopping check
+                        if current_f1_dev > best_f1_dev:
+                            best_f1_dev = current_f1_dev
+                            patience_counter = 0
+                            # Optionally save the best model based on dev F1 score
+                            # torch.save(model.state_dict(), f"{results_dir}/best_model_f1_config_{current_configuration}.pt")
+                        else:
+                            patience_counter += 1
+                        
+                        if patience_counter >= patience:
+                            print(f"Early stopping triggered after {epoch} epochs.")
+                            break # Exit epoch loop
 
                     # --- Evaluation on Test Set ---
                     print("Evaluating on Test set...")
