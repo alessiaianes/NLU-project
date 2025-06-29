@@ -257,11 +257,11 @@ if __name__ == "__main__":
     test_dataset = IntentsAndSlotsBERT(test_raw, lang)
 
     # --- Hyperparameter Search Setup ---
-    hid_size_values = [300, 200] # Example hidden sizes
+    hid_size_values = [200] # Example hidden sizes
     emb_size = 300 # Embedding size (might be fixed by BERT model, e.g., 768)
-    batch_size_values = [128, 64, 32] # Reduced batch sizes for potentially faster testing
-    dropout_values = [0.1, 0.2, 0.3, 0.4] # Example dropout values
-    lr_values = [0.00005, 0.00007, 0.00009] # Lower learning rates often work better with Adam/BERT
+    batch_size_values = [128] # Reduced batch sizes for potentially faster testing
+    dropout_values = [0.1] # Example dropout values
+    lr_values = [0.00009] # Lower learning rates often work better with Adam/BERT
     clip = 5 # Gradient clipping value
     
     out_slot = len(lang.slot2id)
@@ -277,6 +277,42 @@ if __name__ == "__main__":
     # Calculate total configurations for progress tracking
     total_configurations = len(hid_size_values) * len(batch_size_values) * len(dropout_values) * len(lr_values)
     current_configuration = 0
+
+    # --- ADDED: Slot Distribution Analysis ---
+    def analyze_slot_distribution(dataset_list, name="Dataset"):
+        """Analyzes and prints the distribution of slot tags in the dataset."""
+        slot_counts = Counter()
+        total_slots = 0
+        if not dataset_list: 
+            print(f"\n--- Slot Distribution Analysis for {name} ---")
+            print("Dataset is empty. No slots to analyze.")
+            print("-------------------------------------------\n")
+            return
+
+        for item in dataset_list:
+            slots_str = item['slots']
+            slots = slots_str.split()
+            slot_counts.update(slots)
+            total_slots += len(slots)
+        
+        print(f"\n--- Slot Distribution Analysis for {name} ---")
+        print(f"Total slots counted: {total_slots}")
+        sorted_slots = sorted(slot_counts.items(), key=lambda item: item[1], reverse=True)
+        
+        # Print top N slots and overall counts for clarity
+        max_slots_to_print = 10 # Limit output for clarity
+        for i, (slot, count) in enumerate(sorted_slots):
+            if i >= max_slots_to_print:
+                print(f"... and {len(sorted_slots) - max_slots_to_print} more unique slots.")
+                break
+            percentage = (count / total_slots) * 100 if total_slots > 0 else 0
+            print(f"'{slot}': {count} ({percentage:.2f}%)")
+        print("-------------------------------------------\n")
+
+    # Call the analysis functions on the raw data lists
+    analyze_slot_distribution(train_raw, name="Train Raw")
+    analyze_slot_distribution(dev_raw, name="Dev Raw") 
+    analyze_slot_distribution(test_raw, name="Test Raw")
 
     # --- Hyperparameter Tuning Loop ---
     for hid_size in hid_size_values:
