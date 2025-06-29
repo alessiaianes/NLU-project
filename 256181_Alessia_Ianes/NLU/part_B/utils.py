@@ -125,231 +125,329 @@ import torch.utils.data as data
 from transformers import AutoTokenizer # Keep using AutoTokenizer
 
 
-# Ensure PAD_TOKEN and device are defined globally or passed appropriately
+
+# Define PAD_TOKEN globally (usually 0)
 PAD_TOKEN = 0
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+# Determine the device (GPU if available, otherwise CPU)
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu' 
+# Set CUDA_LAUNCH_BLOCKING for debugging CUDA errors
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 def load_data(path):
     """Loads data from a JSON file."""
+    dataset = []
     try:
-        with open(path) as f:
-            dataset = json.loads(f.read())
-        return dataset
+        with open(path, 'r', encoding='utf-8') as f:
+            dataset = json.load(f)
     except FileNotFoundError:
         print(f"Error: Data file not found at {path}")
-        exit()
+        # Handle the error appropriately, maybe exit or return empty list
+        # For this context, exiting might be suitable if data is critical
+        exit() 
     except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from file {path}")
+        print(f"Error: Could not decode JSON from file at {path}")
         exit()
+    return dataset
 
-# Load data globally (or ensure it's loaded before Lang/Dataset are instantiated)
+# Load dataset globally (or ensure it's loaded before use)
+# These paths assume a specific directory structure. Adjust if necessary.
 try:
     tmp_train_raw = load_data(os.path.join('dataset','ATIS','train.json'))
     test_raw = load_data(os.path.join('dataset','ATIS','test.json'))
-    print('Train samples:', len(tmp_train_raw))
-    print('Test samples:', len(test_raw))
+    print(f'Successfully loaded {len(tmp_train_raw)} training samples and {len(test_raw)} test samples.')
+    # Optional: Print a sample to verify structure
+    # if tmp_train_raw:
+    #     pprint(tmp_train_raw[0])
 except Exception as e:
     print(f"An error occurred during data loading: {e}")
     exit()
 
 
 class Lang():
-    """Manages vocabulary, tokenization, and label mappings."""
+    """
+    Manages vocabulary and mappings for intents and slots, 
+    integrating with BERT tokenization.
+    """
     def __init__(self, words, intents, slots, cutoff=0):
-        # Initialize tokenizer
+        # Initialize BERT tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
         
-        # Create slot and intent mappings
+        # Map slots to IDs. PAD_TOKEN (0) is reserved for padding. 'O' tag gets the next ID.
         self.slot2id = self.lab2id(slots, pad=True) 
+        # Map intents to IDs. Padding is not typically needed for intents.
         self.intent2id = self.lab2id(intents, pad=False)
         
-        # Create reverse mappings
+        # Create inverse mappings (ID to label)
         self.id2slot = {v:k for k, v in self.slot2id.items()}
         self.id2intent = {v:k for k, v in self.intent2id.items()}
-        
-        # Store PAD_TOKEN ID for potential use elsewhere
-        self.pad_token_id = PAD_TOKEN
 
     def lab2id(self, elements, pad=True):
-        """Creates a mapping from labels (slots/intents) to IDs."""
+        """
+        Maps a list of labels (elements) to integer IDs.
+        Handles padding and the 'O' (Outside) tag specifically.
+        
+        Args:
+            elements (list): A list of unique labels (strings).
+            pad (bool): If True, reserves ID 0 for padding and assigns 'O' tag to ID 1.
+                        If False, assigns IDs starting from 0.
+        
+        Returns:
+            dict: A dictionary mapping labels to their assigned integer IDs.
+        """
         vocab = {}
-        # Assign PAD_TOKEN (0) to 'pad' and 'O' if padding is enabled
+        idx_counter = 0
+        
+        # 1. Handle Padding Token
         if pad:
-            vocab['pad'] = PAD_TOKEN
-            # Ensure 'O' (often the default non-slot tag) maps to PAD_TOKEN
-            if 'O' not in vocab:
-                 vocab['O'] = PAD_TOKEN 
+            vocab['pad'] = PAD_TOKEN  # Assign PAD_TOKEN (0) to the special 'pad' key
+            idx_counter = PAD_TOKEN + 1 # Start subsequent IDs from 1
+
+        # 2. Handle the 'O' (Outside) Tag
+        o_tag = 'O'
+        elements_set = set(elements) # Use a set for efficient lookup and uniqueness
+        
+        # Check if 'O' tag is present in the provided elements
+        has_o = o_tag in elements_set
+        
+        # Assign ID to 'O' tag:
+        if pad and has_o:
+            # If padding is enabled and 'O' exists, assign it the next available ID (e.g., 1)
+            vocab[o_tag] = idx_counter 
+            idx_counter += 1
+        elif has_o and not pad: 
+             # If no padding, 'O' gets the first ID (0), unless 'pad' was already assigned 0.
+             # This branch ensures 'O' gets ID 0 if padding is disabled.
+             vocab[o_tag] = idx_counter # Assigns 0 if pad=False and no 'pad' key was added.
+             idx_counter += 1
             
-        current_id = 1 # Start assigning IDs from 1 (since 0 is PAD_TOKEN)
+        # 3. Assign IDs to Remaining Labels
+        # Filter out reserved keys ('pad', 'O') and sort the rest for consistent ID assignment.
+        sorted_remaining_elements = sorted([el for el in elements_set if el != 'pad' and el != o_tag])
         
-        # Sort elements for consistent ID assignment, excluding 'pad' and 'O'
-        sorted_elements = sorted([elem for elem in elements if elem not in ['pad', 'O']])
-        
-        for elem in sorted_elements:
-            # Assign the next available ID if the element isn't already mapped
-            if elem not in vocab: 
-                vocab[elem] = current_id
-                current_id += 1
+        for element in sorted_remaining_elements:
+            # Assign the next available sequential ID
+            vocab[element] = idx_counter
+            idx_counter += 1
+             
         return vocab
 
+    def tokenize_utterance(self, utterance):
+        """Tokenizes an utterance using the BERT tokenizer and returns IDs and offset mapping."""
+        # `encode_plus` is preferred for getting multiple outputs like input_ids, token_type_ids, etc.
+        # `return_offsets_mapping=True` is crucial for aligning labels with subword tokens.
+        encoded_input = self.tokenizer.encode_plus(
+            utterance,
+            add_special_tokens=True,      # Add [CLS] and [SEP] tokens
+            return_attention_mask=False,  # We generate this manually later if needed
+            return_offsets_mapping=True,  # Returns start/end indices for each token in the original string
+            truncation=False              # Do not truncate here; handle sequence length in batching/model if needed
+        )
+        return encoded_input['input_ids'], encoded_input['offset_mapping']
+
+    def align_slot_labels_with_tokens(self, slots_str, utterance_str, utt_ids, offset_mapping):
+        """
+        Aligns slot labels (from original words) with BERT's subword tokens.
+        
+        Args:
+            slots_str (str): The string of space-separated slot labels (e.g., "O B-LOC I-LOC").
+            utterance_str (str): The original utterance string.
+            utt_ids (list): The list of token IDs output by the BERT tokenizer.
+            offset_mapping (list): List of (start, end) tuples for each token ID.
+            
+        Returns:
+            list: A list of slot IDs corresponding to each BERT token ID.
+        """
+        original_words = utterance_str.split()
+        original_slots = slots_str.split()
+        
+        # Initialize slot IDs list with the length of BERT tokens, using 'O' slot ID as default
+        # Use .get() with a default value (e.g., PAD_TOKEN or the mapped 'O' ID) for safety
+        o_slot_id = self.slot2id.get('O', PAD_TOKEN) # Get the ID for 'O', default to PAD_TOKEN if 'O' somehow missing
+        bert_slot_ids = [o_slot_id] * len(utt_ids) 
+        
+        current_word_idx = 0 # Index for iterating through original words and slots
+        
+        # BERT's subword prefix is typically '##'
+        subword_prefix = '##' 
+
+        for token_idx, token_info in enumerate(offset_mapping):
+            token_start, token_end = token_info
+
+            # Skip CLS token ([CLS] usually maps to index 0)
+            # Check if it's the first token and corresponds to the CLS token ID
+            if token_idx == 0 and self.tokenizer.cls_token_id == utt_ids[token_idx]:
+                 bert_slot_ids[token_idx] = o_slot_id # Assign 'O' slot to CLS token
+                 continue
+
+            # Skip SEP token ([SEP] usually maps to the last token)
+            # Check if it's the last token and corresponds to the SEP token ID
+            if token_idx == len(utt_ids) - 1 and self.tokenizer.sep_token_id == utt_ids[token_idx]:
+                 bert_slot_ids[token_idx] = o_slot_id # Assign 'O' slot to SEP token
+                 continue
+            
+            # Get the actual token string from its ID
+            # convert_ids_to_tokens expects a list
+            token_str = self.tokenizer.convert_ids_to_tokens([utt_ids[token_idx]])[0]
+            
+            # Check if the token is a continuation of a previous word (i.e., a subword)
+            # This check assumes subwords start with '##'. Adjust if using a different BERT variant.
+            is_subword_continuation = token_str.startswith(subword_prefix)
+
+            if not is_subword_continuation:
+                 # This token likely represents the start of a new original word.
+                 # Assign the slot label corresponding to this original word.
+                 if current_word_idx < len(original_slots):
+                      slot_label = original_slots[current_word_idx]
+                      bert_slot_ids[token_idx] = self.slot2id.get(slot_label, o_slot_id) # Use .get for safety
+                 else:
+                      # If we run out of original slots (shouldn't happen with correct alignment)
+                      bert_slot_ids[token_idx] = o_slot_id 
+                 
+                 current_word_idx += 1 # Move to the next original word for subsequent tokens
+            else:
+                 # This token is a subword continuation of the *previous* original word.
+                 # Assign the same slot ID as the beginning of that word.
+                 prev_word_slot_idx = current_word_idx - 1 # Index of the word this subword belongs to
+                 
+                 # Check if the previous word index is valid
+                 if prev_word_slot_idx >= 0 and prev_word_slot_idx < len(original_slots):
+                      slot_label = original_slots[prev_word_slot_idx]
+                      bert_slot_ids[token_idx] = self.slot2id.get(slot_label, o_slot_id)
+                 else:
+                      # Fallback if prev_word_slot_idx is invalid (e.g., subword belongs to CLS/SEP)
+                      bert_slot_ids[token_idx] = o_slot_id
+        
+        # Final sanity check: Ensure the length of slot IDs matches the length of token IDs.
+        # This is crucial for batching. If mismatch occurs, it indicates an alignment issue.
+        if len(bert_slot_ids) != len(utt_ids):
+            print(f"Warning: Slot ID length mismatch! Slots len: {len(bert_slot_ids)}, Utt IDs len: {len(utt_ids)}")
+            # Truncate or pad the slot IDs to match the utterance IDs length.
+            if len(bert_slot_ids) > len(utt_ids):
+                bert_slot_ids = bert_slot_ids[:len(utt_ids)]
+            else:
+                # Pad with 'O' slot ID if utterance sequence is longer than slots (should ideally not happen)
+                bert_slot_ids.extend([o_slot_id] * (len(utt_ids) - len(bert_slot_ids)))
+
+        return bert_slot_ids
+
+
 class IntentsAndSlotsBERT(data.Dataset):
-    """Custom Dataset for BERT-based intent and slot tagging."""
+    """
+    PyTorch Dataset for Intent and Slot classification using BERT.
+    Processes utterances and aligns slot labels to BERT tokens.
+    """
     def __init__(self, dataset, lang):
         self.utterances = []
         self.intents = []
         self.slots = []
         self.lang = lang
 
-        # Store original data
+        # Populate internal lists from the raw dataset
         for x in dataset:
             self.utterances.append(x['utterance'])
-            self.slots.append(x['slots']) # String like "O B-flight-from O ..."
-            self.intents.append(x['intent'])
+            self.slots.append(x['slots']) # Raw slot string like "O B-LOC I-LOC"
+            self.intents.append(x['intent']) # Raw intent string like "flight-booking"
 
     def __len__(self):
-        """Returns the total number of samples."""
+        """Returns the total number of samples in the dataset."""
         return len(self.utterances)
 
     def __getitem__(self, idx):
-        """Generates one sample (tokenized utterance, aligned slots, intent)."""
-        utt_string = self.utterances[idx]
+        """
+        Retrieves and processes a single sample from the dataset.
+        
+        Args:
+            idx (int): The index of the sample to retrieve.
+            
+        Returns:
+            dict: A dictionary containing processed 'utterance' (token IDs), 
+                  'slots' (aligned slot IDs), and 'intent' (intent ID).
+        """
+        utterance_str = self.utterances[idx]
         slots_str = self.slots[idx]
         intent_str = self.intents[idx]
 
-        # Tokenize utterance using BERT tokenizer
-        # IMPORTANT: No truncation is applied as per requirement. Handle potential long sequences.
-        encoded_input = self.lang.tokenizer.encode_plus(
-            utt_string,
-            add_special_tokens=True,          # Add [CLS] and [SEP]
-            return_attention_mask=False,      # We create our own attention mask later if needed
-            return_offsets_mapping=True,      # Crucial for aligning slots
-            truncation=False                  # Explicitly disable truncation
-        )
+        # Tokenize the utterance using the Lang object's tokenizer
+        utt_ids, offset_mapping = self.lang.tokenize_utterance(utterance_str)
         
-        utt_ids = encoded_input['input_ids']
-        offset_mapping = encoded_input['offset_mapping'] # List of (start, end) byte offsets
-
-        # Align slot labels to the tokenized sequence
-        slot_ids = self.align_slot_labels_with_tokens(slots_str, utt_string, utt_ids, offset_mapping, self.lang)
+        # Align the raw slot labels with the tokenized sequence
+        slot_ids = self.lang.align_slot_labels_with_tokens(slots_str, utterance_str, utt_ids, offset_mapping)
         
-        # Get intent ID
-        intent_id = self.lang.intent2id.get(intent_str, self.lang.intent2id.get('pad', PAD_TOKEN)) # Use 'pad' as fallback
+        # Get the integer ID for the intent
+        intent_id = self.lang.intent2id.get(intent_str, self.lang.intent2id.get('UNK', PAD_TOKEN)) # Use fallback
         
+        # Construct the sample dictionary
         sample = {'utterance': utt_ids, 'slots': slot_ids, 'intent': intent_id}
         return sample
 
-    def align_slot_labels_with_tokens(self, slots_str, utt_string, utt_ids, offset_mapping, lang):
-        """Aligns original slot tags to BERT subword tokens."""
-        
-        original_slots = slots_str.split()
-        
-        # Initialize slot IDs list with PAD_TOKEN for all BERT tokens
-        bert_slot_ids = [lang.slot2id.get('pad', PAD_TOKEN)] * len(utt_ids) 
-        
-        original_word_idx = 0 # Index for tracking the current original word/slot
-        
-        # Iterate through the tokens and their offset mappings
-        for token_idx, token_info in enumerate(offset_mapping):
-            token_start, token_end = token_info
-            
-            # Skip if token has zero length (can happen with special tokens sometimes)
-            if token_start == token_end and token_idx != 0 and token_idx != len(utt_ids) - 1: 
-                continue
-
-            # Handle Special Tokens ([CLS], [SEP]) - assign 'pad' slot ID ('O')
-            if token_idx == 0 or token_idx == len(utt_ids) - 1:
-                # Ensure the slot ID for CLS/SEP is the PAD_TOKEN ID (mapped from 'pad'/'O')
-                bert_slot_ids[token_idx] = lang.slot2id.get('pad', PAD_TOKEN) 
-                continue # Move to the next token
-                 
-            # Check if we have processed all original slots
-            if original_word_idx >= len(original_slots):
-                 # Assign 'pad' slot ID if we run out of original slots prematurely
-                 bert_slot_ids[token_idx] = lang.slot2id.get('pad', PAD_TOKEN)
-                 continue
-
-            # Get the current original slot tag
-            current_original_slot = original_slots[original_word_idx]
-            
-            # Assign the slot ID to the current BERT token
-            bert_slot_ids[token_idx] = lang.slot2id.get(current_original_slot, lang.slot2id.get('pad', PAD_TOKEN))
-            
-            # Determine if we should advance to the next original slot
-            # Advance if the current token is the end of its original word span
-            is_last_subword = True # Assume it's the last subword by default
-            if token_idx + 1 < len(offset_mapping):
-                next_token_start, _ = offset_mapping[token_idx + 1]
-                # If the next token starts exactly where the current one ends, it's part of the same word
-                if next_token_start == token_end: 
-                    is_last_subword = False
-            
-            # If this token marks the end of an original word, advance the original word index
-            if is_last_subword:
-                original_word_idx += 1
-
-        # Final sanity check: Ensure lengths match
-        if len(bert_slot_ids) != len(utt_ids):
-             # Pad or truncate bert_slot_ids to match utt_ids length
-             if len(bert_slot_ids) > len(utt_ids):
-                 bert_slot_ids = bert_slot_ids[:len(utt_ids)]
-             else:
-                 bert_slot_ids.extend([lang.slot2id.get('pad', PAD_TOKEN)] * (len(utt_ids) - len(bert_slot_ids)))
-
-        return bert_slot_ids
-
-
 def collate_fn_bert(data):
     """
-    Collate function for creating batches of BERT-formatted data.
-    Pads sequences to the maximum length in the batch.
-    """
-    # Handle empty data case
-    if not data:
-        return {}
+    Custom collate function for creating batches of BERT data.
+    Pads sequences to the same length and creates attention masks.
+    
+    Args:
+        data (list): A list of samples (dictionaries) from the Dataset.
         
-    # Sort data by sequence length (utterance length) in descending order
-    # Useful for potential packed sequences, though not strictly required here with attention masks
+    Returns:
+        dict: A dictionary containing batched tensors for 'utterance', 'intent', 
+              'slots', and 'attention_mask'. Returns an empty dict if data is empty.
+    """
+    # Sort data by sequence length (utterance length) in descending order.
+    # This is standard practice for sequence models, especially if using packing.
     data.sort(key=lambda x: len(x['utterance']), reverse=True) 
     
     new_item = {}
-    # Use keys from the first item (assuming all items have the same structure)
+    # Handle the edge case where the input data list might be empty
+    if not data: 
+        return {} # Return empty dictionary if no data
+        
+    # Use the keys from the first item to iterate, assuming all items have the same keys
     keys = data[0].keys()
     for key in keys:
+        # Collect all values for a given key across the batch
         new_item[key] = [d[key] for d in data]
 
     # Helper function to merge sequences into padded tensors
     def merge(sequences):
+        """Pads sequences to the maximum length in the batch."""
         lengths = [len(seq) for seq in sequences]
         max_len = max(lengths) if lengths else 0
         
-        # Return empty tensors if max_len is 0
+        # Handle cases where sequences might be empty after processing
         if max_len == 0: 
+             # Return empty tensor with shape (batch_size, 0) if max_len is 0
              return torch.empty((len(sequences), 0), dtype=torch.long), lengths
              
-        # Create padded tensor initialized with PAD_TOKEN (0)
+        # Create a tensor filled with PAD_TOKEN (0)
+        # Shape: (batch_size, max_sequence_length)
         padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
+        
+        # Fill the tensor with the actual sequence data
         for i, seq in enumerate(sequences):
             end = lengths[i]
             if end > 0:
-                # Fill tensor with actual sequence data
+                # Convert list sequence to tensor before assigning
                 padded_seqs[i, :end] = torch.LongTensor(seq) 
         return padded_seqs, lengths
 
-    # Merge utterance IDs, slot IDs, and intent IDs
-    src_utt, _ = merge(new_item['utterance'])
+    # Merge utterance IDs (input sequence)
+    src_utt, lengths = merge(new_item['utterance'])
+    # Merge slot IDs (target sequence)
+    # Slot sequence length should match utterance sequence length after alignment
     y_slots, _ = merge(new_item["slots"]) 
+    # Merge intent IDs (target scalar value per sample)
     intent = torch.LongTensor(new_item["intent"])
 
-    # Move tensors to the specified device
+    # Move tensors to the specified device (GPU or CPU)
     src_utt = src_utt.to(device)
     y_slots = y_slots.to(device)
     intent = intent.to(device)
 
-    # Create attention mask (1 for real tokens, 0 for padding)
+    # Create attention mask: 1 indicates a real token, 0 indicates padding.
+    # This mask is crucial for BERT to ignore padding tokens.
     attention_mask = (src_utt != PAD_TOKEN).float().to(device)
 
-    # Update dictionary with processed tensors
+    # Update the batch dictionary with the processed tensors
     new_item["utterance"] = src_utt
     new_item["intent"] = intent
     new_item["slots"] = y_slots
