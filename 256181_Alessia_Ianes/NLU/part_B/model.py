@@ -28,7 +28,7 @@ import torch.nn as nn
 from transformers import BertModel
 
 class BertModelIAS(nn.Module):
-    def __init__(self, hid_size, out_slot, out_int, dropout=0.1):
+    def __init__(self, out_slot, out_int, dropout=0.1):
         super(BertModelIAS, self).__init__()
         # Load the pretrained BERT model
         self.bert = BertModel.from_pretrained('bert-base-uncased')
