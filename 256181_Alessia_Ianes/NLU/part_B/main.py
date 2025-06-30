@@ -278,41 +278,41 @@ if __name__ == "__main__":
     total_configurations = len(hid_size_values) * len(batch_size_values) * len(dropout_values) * len(lr_values)
     current_configuration = 0
 
-    # --- ADDED: Slot Distribution Analysis ---
-    def analyze_slot_distribution(dataset_list, name="Dataset"):
-        """Analyzes and prints the distribution of slot tags in the dataset."""
-        slot_counts = Counter()
-        total_slots = 0
-        if not dataset_list: 
-            print(f"\n--- Slot Distribution Analysis for {name} ---")
-            print("Dataset is empty. No slots to analyze.")
-            print("-------------------------------------------\n")
-            return
+    # # --- ADDED: Slot Distribution Analysis ---
+    # def analyze_slot_distribution(dataset_list, name="Dataset"):
+    #     """Analyzes and prints the distribution of slot tags in the dataset."""
+    #     slot_counts = Counter()
+    #     total_slots = 0
+    #     if not dataset_list: 
+    #         print(f"\n--- Slot Distribution Analysis for {name} ---")
+    #         print("Dataset is empty. No slots to analyze.")
+    #         print("-------------------------------------------\n")
+    #         return
 
-        for item in dataset_list:
-            slots_str = item['slots']
-            slots = slots_str.split()
-            slot_counts.update(slots)
-            total_slots += len(slots)
+    #     for item in dataset_list:
+    #         slots_str = item['slots']
+    #         slots = slots_str.split()
+    #         slot_counts.update(slots)
+    #         total_slots += len(slots)
         
-        print(f"\n--- Slot Distribution Analysis for {name} ---")
-        print(f"Total slots counted: {total_slots}")
-        sorted_slots = sorted(slot_counts.items(), key=lambda item: item[1], reverse=True)
+    #     print(f"\n--- Slot Distribution Analysis for {name} ---")
+    #     print(f"Total slots counted: {total_slots}")
+    #     sorted_slots = sorted(slot_counts.items(), key=lambda item: item[1], reverse=True)
         
-        # Print top N slots and overall counts for clarity
-        max_slots_to_print = 10 # Limit output for clarity
-        for i, (slot, count) in enumerate(sorted_slots):
-            if i >= max_slots_to_print:
-                print(f"... and {len(sorted_slots) - max_slots_to_print} more unique slots.")
-                break
-            percentage = (count / total_slots) * 100 if total_slots > 0 else 0
-            print(f"'{slot}': {count} ({percentage:.2f}%)")
-        print("-------------------------------------------\n")
+    #     # Print top N slots and overall counts for clarity
+    #     max_slots_to_print = 10 # Limit output for clarity
+    #     for i, (slot, count) in enumerate(sorted_slots):
+    #         if i >= max_slots_to_print:
+    #             print(f"... and {len(sorted_slots) - max_slots_to_print} more unique slots.")
+    #             break
+    #         percentage = (count / total_slots) * 100 if total_slots > 0 else 0
+    #         print(f"'{slot}': {count} ({percentage:.2f}%)")
+    #     print("-------------------------------------------\n")
 
-    # Call the analysis functions on the raw data lists
-    analyze_slot_distribution(train_raw, name="Train Raw")
-    analyze_slot_distribution(dev_raw, name="Dev Raw") 
-    analyze_slot_distribution(test_raw, name="Test Raw")
+    # # Call the analysis functions on the raw data lists
+    # analyze_slot_distribution(train_raw, name="Train Raw")
+    # analyze_slot_distribution(dev_raw, name="Dev Raw") 
+    # analyze_slot_distribution(test_raw, name="Test Raw")
 
     # --- Hyperparameter Tuning Loop ---
     for hid_size in hid_size_values:
@@ -353,7 +353,7 @@ if __name__ == "__main__":
                     best_f1_dev = 0.0     # Track best F1 score on dev set
 
                     print(f"Starting training for {n_epochs} epochs...")
-                    epoch_progress_bar = tqdm(range(1, n_epochs + 1)) 
+                    epoch_progress_bar = tqdm(range(1, n_epochs)) 
                     for epoch in epoch_progress_bar:
                         # Train for one epoch
                         avg_loss_train = train_loop(train_loader, optimizer, criterion_slots, criterion_intents, model, clip=clip)
