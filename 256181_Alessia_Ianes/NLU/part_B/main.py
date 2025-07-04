@@ -85,9 +85,9 @@ if __name__ == "__main__":
     # --- Hyperparameter Search Setup ---
     #hid_size_values = [200, 300] # Example hidden sizes
     emb_size = 300 # Embedding size (might be fixed by BERT model, e.g., 768)
-    batch_size_values = [128] # Reduced batch sizes for potentially faster testing
+    batch_size_values = [32] # Reduced batch sizes for potentially faster testing
     dropout_values = [0.1] # Example dropout values
-    lr_values = [0.00009] # Lower learning rates often work better with Adam/BERT
+    lr_values = [0.00001] # Lower learning rates often work better with Adam/BERT
     clip = 5 # Gradient clipping value
     
     out_slot = len(lang.slot2id)
