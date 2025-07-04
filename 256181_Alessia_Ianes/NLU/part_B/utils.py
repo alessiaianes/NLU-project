@@ -52,7 +52,7 @@ class Lang():
     """
     def __init__(self, words, intents, slots, cutoff=0):
         # Initialize BERT tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained('bert-large-uncased')
+        self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
         
         # Map slots to IDs. PAD_TOKEN (0) is reserved for padding. 'O' tag gets the next ID.
         self.slot2id = self.lab2id(slots, pad=True) 

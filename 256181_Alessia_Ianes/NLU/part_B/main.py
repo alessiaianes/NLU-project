@@ -86,24 +86,21 @@ if __name__ == "__main__":
     #hid_size_values = [200, 300] # Example hidden sizes
     emb_size = 300 # Embedding size (might be fixed by BERT model, e.g., 768)
     batch_size_values = [128] # Reduced batch sizes for potentially faster testing
-    dropout_values = [0.1] # Example dropout values
-    lr_values = [0.00009] # Lower learning rates often work better with Adam/BERT
+    dropout_values = [0.2, 0.1] # Example dropout values
+    lr_values = [0.00003, 0.00009] # Lower learning rates often work better with Adam/BERT
     clip = 5 # Gradient clipping value
+    runs = 5
     
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     
     # Create results directory
-    results_dir = 'results/BERT_large'
+    results_dir = 'results/BERT_drop'
     plot_dir = os.path.join(results_dir, 'plots')
     os.makedirs(plot_dir, exist_ok=True)
 
-    model_save_dir = "bin/BERT_large"
+    model_save_dir = "bin/BERT_base"
     os.makedirs(model_save_dir, exist_ok=True)
-
-    
-
-    all_results = [] # To store results for finding the best configuration
     
     # Calculate total configurations for progress tracking
     total_configurations = len(batch_size_values) * len(dropout_values) * len(lr_values)
@@ -121,111 +118,113 @@ if __name__ == "__main__":
                 print(f"Running configuration: lr={lr}, Batch Size={bs}, Dropout={d}")
                 print("=" * 89)
 
-                # Create DataLoaders
-                # Use smaller batch size for dev/test if needed, but ensure collate_fn handles it
                 train_loader = DataLoader(train_dataset, batch_size=bs, collate_fn=collate_fn_bert, shuffle=True)
-                # Use bs//2 or a fixed smaller size like 32 for dev/test loaders
                 dev_loader = DataLoader(dev_dataset, batch_size=bs // 2, collate_fn=collate_fn_bert)
                 test_loader = DataLoader(test_dataset, batch_size= bs // 2, collate_fn=collate_fn_bert)
-
-                # Initialize Model, Optimizer, Loss Functions
-                model = BertModelIAS(out_slot, out_int, dropout=d).to(device)
-                optimizer = optim.Adam(model.parameters(), lr=lr)
-                # Ignore index PAD_TOKEN (0) in slot loss calculation
-                criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN) 
-                criterion_intents = nn.CrossEntropyLoss()
-
-                # Training Parameters
-                n_epochs = 50 # Reduced epochs for quicker testing; increase for full run (e.g., 50 or 100)
-                patience = 3 # Early stopping patience
-                patience_counter = 0
                 
-                losses_train_avg = [] # Store average training loss per epoch (or per N steps)
-                losses_dev_avg = []   # Store average dev loss per epoch
-                sampled_epochs = []   # Store epochs where evaluation was done
-                f1_scores_dev = []    # Store F1 scores on dev set
-                accuracies_dev = []   # Store intent accuracies on dev set
-                best_f1_dev = 0.0     # Track best F1 score on dev set
+                slot_f1s, intent_acc = [], []
+                for x in tqdm(range(0, runs)):
+                    print("\n" + "-" * 89)
+                    print(f"Starting run test #{x} of {runs} of configuration {current_configuration}")
+                    print("-" * 89)
 
-                print(f"Starting training for {n_epochs} epochs...")
-                epoch_progress_bar = tqdm(range(1, n_epochs), desc="Training process") 
-                for epoch in epoch_progress_bar:
-                    # Train for one epoch
-                    avg_loss_train = train_loop(train_loader, optimizer, criterion_slots, criterion_intents, model, clip=clip)
-                    
-                    # Evaluate every N epochs (e.g., every epoch or every 5 epochs)
-                    #if epoch % 1 == 0: # Check performance every epoch for more detail
-                    sampled_epochs.append(epoch)
-                    losses_train_avg.append(avg_loss_train)
-                    
-                    # Evaluate on Dev set
-                    results_dev, intent_res_dev, avg_loss_dev = eval_loop(dev_loader, criterion_slots, criterion_intents, model, lang)
-                    
-                    current_f1_dev = results_dev.get('total', {}).get('f', 0.0) # Safely get F1 score
-                    current_acc_dev = intent_res_dev.get('accuracy', 0.0) # Safely get accuracy
-                    
-                    losses_dev_avg.append(avg_loss_dev)
-                    f1_scores_dev.append(current_f1_dev)
-                    accuracies_dev.append(current_acc_dev)
 
-                    epoch_progress_bar.set_postfix({
-                        'Epoch': epoch, 
-                        'Dev_F1': f'{current_f1_dev:.4f}', 
-                        'Dev_Acc': f'{current_acc_dev:.4f}'
-                    })
+                    # Create DataLoaders
+                    # Use smaller batch size for dev/test if needed, but ensure collate_fn handles it
 
-                    # Early stopping check
-                    if current_f1_dev > best_f1_dev:
-                        best_f1_dev = current_f1_dev
-                        patience_counter = 0
-                        # Optionally save the best model based on dev F1 score
-                        # torch.save(model.state_dict(), f"{results_dir}/best_model_f1_config_{current_configuration}.pt")
-                    else:
-                        patience_counter += 1
+                    # Initialize Model, Optimizer, Loss Functions
+                    model = BertModelIAS(out_slot, out_int, dropout=d).to(device)
+                    optimizer = optim.Adam(model.parameters(), lr=lr)
+                    # Ignore index PAD_TOKEN (0) in slot loss calculation
+                    criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN) 
+                    criterion_intents = nn.CrossEntropyLoss()
+
+                    # Training Parameters
+                    n_epochs = 50 # Reduced epochs for quicker testing; increase for full run (e.g., 50 or 100)
+                    patience = 3 # Early stopping patience
+                    patience_counter = 0
                     
-                    if patience_counter >= patience:
-                        print(f"Early stopping triggered after {epoch} epochs.")
-                        break # Exit epoch loop
+                    losses_train_avg = [] # Store average training loss per epoch (or per N steps)
+                    losses_dev_avg = []   # Store average dev loss per epoch
+                    sampled_epochs = []   # Store epochs where evaluation was done
+                    f1_scores_dev = []    # Store F1 scores on dev set
+                    accuracies_dev = []   # Store intent accuracies on dev set
+                    best_f1_dev = 0.0     # Track best F1 score on dev set
+                    best_f1 = 0
+                    best_acc = 0
 
-                # --- Evaluation on Test Set ---
-                print("Evaluating on Test set...")
-                results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang)    
-                print(f'Test Slot F1: {results_test.get("total", {}).get("f", "N/A")}')
-                print(f'Test Intent Accuracy: {intent_test.get("accuracy", "N/A")}')
+                    print(f"Starting training for {n_epochs} epochs...")
+                    epoch_progress_bar = tqdm(range(1, n_epochs), desc="Training process") 
+                    for epoch in epoch_progress_bar:
+                        # Train for one epoch
+                        avg_loss_train = train_loop(train_loader, optimizer, criterion_slots, criterion_intents, model, clip=clip)
+                        
+                        # Evaluate every N epochs (e.g., every epoch or every 5 epochs)
+                        #if epoch % 1 == 0: # Check performance every epoch for more detail
+                        sampled_epochs.append(epoch)
+                        losses_train_avg.append(avg_loss_train)
+                        
+                        # Evaluate on Dev set
+                        results_dev, intent_res_dev, avg_loss_dev = eval_loop(dev_loader, criterion_slots, criterion_intents, model, lang)
+                        
+                        current_f1_dev = results_dev.get('total', {}).get('f', 0.0) # Safely get F1 score
+                        current_acc_dev = intent_res_dev.get('accuracy', 0.0) # Safely get accuracy
+                        
+                        losses_dev_avg.append(avg_loss_dev)
+                        f1_scores_dev.append(current_f1_dev)
+                        accuracies_dev.append(current_acc_dev)
 
-                config_params = {
-                    'Model': 'BERT-large-uncased', # Explicitly state the model used
+                        epoch_progress_bar.set_postfix({
+                            'Epoch': epoch, 
+                            'Dev_F1': f'{current_f1_dev:.4f}', 
+                            'Dev_Acc': f'{current_acc_dev:.4f}'
+                        })
+
+                        # Early stopping check
+                        if current_f1_dev > best_f1_dev:
+                            best_f1_dev = current_f1_dev
+                            patience_counter = 0
+                            # Optionally save the best model based on dev F1 score
+                            # torch.save(model.state_dict(), f"{results_dir}/best_model_f1_config_{current_configuration}.pt")
+                        else:
+                            patience_counter += 1
+                        
+                        if patience_counter >= patience:
+                            print(f"Early stopping triggered after {epoch} epochs.")
+                            break # Exit epoch loop
+
+                    # --- Evaluation on Test Set ---
+                    print("Evaluating on Test set...")
+                    results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang)    
+                    print(f'Test Slot F1: {results_test.get("total", {}).get("f", "N/A")}')
+                    print(f'Test Intent Accuracy: {intent_test.get("accuracy", "N/A")}')
+                    intent_acc.append(intent_test['accuracy'])
+                    slot_f1s.append(results_test['total']['f'])
+                
+                slot_f1s = np.asarray(slot_f1s)
+                intent_acc = np.asarray(intent_acc)
+                print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
+                print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(slot_f1s.std(), 3))
+
+                if round(slot_f1s.mean(),3) > best_f1:
+                    best_f1 = round(slot_f1s.mean(),3)
+                    config_params_f1 = {
+                    'Model': 'BERT-base-uncased', # Explicitly state the model used
                     'Batch Size': bs,
                     'Learning Rate': lr,
                     'Dropout': d
                 }
 
-                model_filename = f"BERT_large_model.pt"
-                model_save_path = os.path.join(model_save_dir, model_filename)
-                saving_object = {
-                    "epoch": epoch,
-                    "model": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "slot2id": lang.slot2id,
-                    "intent2id": lang.intent2id,
-                    "config": config_params, # Save the config that led to this best score
+                if round(intent_acc.mean(), 3) > best_acc:
+                    best_acc = round(intent_acc.mean(), 3)
+                    config_params_acc = {
+                    'Model': 'BERT-base-uncased', # Explicitly state the model used
+                    'Batch Size': bs,
+                    'Learning Rate': lr,
+                    'Dropout': d
                 }
-                torch.save(saving_object, model_save_path)
-
-
-                # --- Store Results ---
-                # Store configuration parameters and best dev scores achieved
-                # all_results.append({
-                #     'Batch Size': bs,
-                #     'Learning Rate': lr,
-                #     'Dropout': d,
-                #     'F1 score dev': best_f1_dev, # Use best dev score found
-                #     'Accuracy dev': max(accuracies_dev) if accuracies_dev else 0.0,
-                #     'Test F1': results_test.get('total', {}).get('f', 0.0),
-                #     'Test Acc': intent_test.get('accuracy', 0.0)
-                # })
-
-                # Save detailed results per configuration to CSV
+                    
+                  # Save detailed results per configuration to CSV
                 results_df = pd.DataFrame({
                     'Epoch': sampled_epochs,
                     'F1 dev': f1_scores_dev,
@@ -233,14 +232,14 @@ if __name__ == "__main__":
                     'Loss Train': losses_train_avg,
                     'Loss Dev': losses_dev_avg,
                     # Add test scores repeated for each epoch line
-                    'F1 test': [results_test.get('total', {}).get('f', 0.0)] * len(sampled_epochs),
-                    'Acc test': [intent_test.get('accuracy', 0.0)] * len(sampled_epochs)
+                    'F1 test': [round(slot_f1s.mean(),3)] * len(sampled_epochs),
+                    'Acc test': [round(intent_acc.mean(), 3)] * len(sampled_epochs)
                 })
-                csv_filename = os.path.join(results_dir, f'BERT_large_lr_{lr}_bs_{bs}_dropout_{d}.csv')
+                csv_filename = os.path.join(results_dir, f'BERT_drop_lr_{lr}_bs_{bs}_dropout_{d}.csv')
                 results_df.to_csv(csv_filename, index=False)
                 print(f"Detailed results saved to {csv_filename}")
-
-                # --- Plotting ---
+        
+                 # --- Plotting ---
                 # Plot F1 and Accuracy on Dev Set
                 plt.figure(figsize=(10, 6)) # Use different figure number or clear figure
                 plt.title(f'Dev Set Performance (lr={lr}, bs={bs}, drop={d})')
@@ -252,7 +251,7 @@ if __name__ == "__main__":
                 plt.xlim(1, n_epochs) # Ensure x-axis covers all epochs
                 plt.ylim(0.0, 1.05) # Adjust ylim slightly
                 plt.grid(True)
-                res_plot_filename = os.path.join(plot_dir, f'BERT_large_res_plot_lr_{lr}_bs_{bs}_dropout_{d}.png')
+                res_plot_filename = os.path.join(plot_dir, f'BERT_res_plot_lr_{lr}_bs_{bs}_dropout_{d}.png')
                 plt.savefig(res_plot_filename)
                 print(f"Dev performance plot saved: '{res_plot_filename}'")
                 plt.close()
@@ -268,10 +267,51 @@ if __name__ == "__main__":
                 plt.xlim(1, n_epochs) # Ensure x-axis covers all epochs
                 plt.ylim(0.0, 3.5) # Auto adjust ylim
                 plt.grid(True)
-                loss_plot_filename = os.path.join(plot_dir, f'BERT_large_loss_plot_lr_{lr}_bs_{bs}_dropout_{d}.png')
+                loss_plot_filename = os.path.join(plot_dir, f'BERT_loss_plot_lr_{lr}_bs_{bs}_dropout_{d}.png')
                 plt.savefig(loss_plot_filename)
                 print(f"Loss plot saved: '{loss_plot_filename}'")
                 plt.close()
 
                 print(f"Finished run #{current_configuration} of {total_configurations}")
                 print("-" * 89)
+    
+
+    model_F1_filename = f"BERT_base_model_F1.pt"
+    model_Acc_filename = f"BERT_base_model_Acc.pt"
+    model_save_path_F1 = os.path.join(model_save_dir, model_F1_filename)
+    model_save_path_Acc = os.path.join(model_save_dir, model_Acc_filename)
+    saving_object_F1 = {
+        "epoch": epoch,
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "slot2id": lang.slot2id,
+        "intent2id": lang.intent2id,
+        "config": config_params_f1, # Save the config that led to this best score
+    }
+    saving_object_Acc = {
+        "epoch": epoch,
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "slot2id": lang.slot2id,
+        "intent2id": lang.intent2id,
+        "config": config_params_acc, # Save the config that led to this best score
+    }
+    torch.save(saving_object_Acc, model_save_path_Acc)
+    torch.save(saving_object_F1, model_save_path_F1)
+
+
+    # --- Store Results ---
+    # Store configuration parameters and best dev scores achieved
+    # all_results.append({
+    #     'Batch Size': bs,
+    #     'Learning Rate': lr,
+    #     'Dropout': d,
+    #     'F1 score dev': best_f1_dev, # Use best dev score found
+    #     'Accuracy dev': max(accuracies_dev) if accuracies_dev else 0.0,
+    #     'Test F1': results_test.get('total', {}).get('f', 0.0),
+    #     'Test Acc': intent_test.get('accuracy', 0.0)
+    # })
+
+  
+
+   
