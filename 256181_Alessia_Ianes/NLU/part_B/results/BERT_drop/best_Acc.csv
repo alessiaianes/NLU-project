@@ -1,0 +1,2 @@
+learning rate,batch size,dropout,Acc
+3e-05,128,0.2,0.980963045912654

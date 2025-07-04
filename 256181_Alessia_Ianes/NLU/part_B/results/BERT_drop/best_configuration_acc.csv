@@ -1,2 +1,0 @@
-Batch Size,Learning Rate,Dropout,F1 score dev,Accuracy dev,Test F1,Test Acc
-64,5e-05,0.2,0.9716231555051078,0.9979919678714859,0.9388368983957219,0.975363941769317
