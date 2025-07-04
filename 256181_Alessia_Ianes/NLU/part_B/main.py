@@ -105,7 +105,8 @@ if __name__ == "__main__":
     # Calculate total configurations for progress tracking
     total_configurations = len(batch_size_values) * len(dropout_values) * len(lr_values)
     current_configuration = 0
-
+    best_f1 = 0
+    best_acc = 0
 
     # --- Hyperparameter Tuning Loop ---
   
@@ -113,6 +114,7 @@ if __name__ == "__main__":
         for d in dropout_values:
             for lr in lr_values:
                 current_configuration += 1
+                print("BEST F1, BEST ACC", best_f1, best_acc)
                 print("\n" + "=" * 89)
                 print(f"Starting run #{current_configuration} of {total_configurations}")
                 print(f"Running configuration: lr={lr}, Batch Size={bs}, Dropout={d}")
@@ -123,9 +125,10 @@ if __name__ == "__main__":
                 test_loader = DataLoader(test_dataset, batch_size= bs // 2, collate_fn=collate_fn_bert)
                 
                 slot_f1s, intent_acc = [], []
+                
                 for x in tqdm(range(0, runs)):
                     print("\n" + "-" * 89)
-                    print(f"Starting run test #{x} of {runs} of configuration {current_configuration}")
+                    print(f"Starting run test #{x + 1} of {runs} of configuration {current_configuration}")
                     print("-" * 89)
 
 
@@ -150,8 +153,7 @@ if __name__ == "__main__":
                     f1_scores_dev = []    # Store F1 scores on dev set
                     accuracies_dev = []   # Store intent accuracies on dev set
                     best_f1_dev = 0.0     # Track best F1 score on dev set
-                    best_f1 = 0
-                    best_acc = 0
+                    
 
                     print(f"Starting training for {n_epochs} epochs...")
                     epoch_progress_bar = tqdm(range(1, n_epochs), desc="Training process") 
@@ -297,7 +299,9 @@ if __name__ == "__main__":
         "config": config_params_acc, # Save the config that led to this best score
     }
     torch.save(saving_object_Acc, model_save_path_Acc)
+    print("Saving model for best intent accuracy with configuration:", config_params_acc)
     torch.save(saving_object_F1, model_save_path_F1)
+    print("Saving model for best slot F1 with configuration:", config_params_f1)
 
 
     # --- Store Results ---
