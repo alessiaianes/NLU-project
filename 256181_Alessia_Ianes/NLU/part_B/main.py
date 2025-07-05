@@ -132,6 +132,7 @@ if __name__ == "__main__":
 
             print(f"Model loaded successfully from {model_save_path}")
             print(f"Loaded configuration: {loaded_config}")
+            print(f'Learning rate: {loaded_config.get('Learning Rate', 0.0)}')
 
             # --- Evaluation on Test Set ---
             print("Evaluating loaded model on Test set...")
