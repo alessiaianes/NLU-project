@@ -62,11 +62,11 @@ if __name__ == "__main__":
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
-    hid_size = 300 # Hidden size
+    hid_size = 200 # Hidden size
     emb_size = 300
-    bs = 128 # Batch size
-    d = [0.1, 0.2, 0.3, 0.4] # Dropout values
-    lr = 0.0003 # learning rate
+    bs = 32 # Batch size
+    d = 0.4 # Dropout values
+    lr = 0.0007 # learning rate
     clip = 5 # Clip the gradient
 
     out_slot = len(lang.slot2id)
@@ -74,8 +74,8 @@ if __name__ == "__main__":
     vocab_len = len(lang.word2id)
 
     # Create a directory to save the results, if it doesn't exist
-    os.makedirs('results/LSTM_baseline/plots', exist_ok=True)
-    model_save_dir = "bin/LSTM_baseline"
+    os.makedirs('results/LSTM_drop/plots', exist_ok=True)
+    model_save_dir = "bin/LSTM_drop"
     os.makedirs(model_save_dir, exist_ok=True)
     #all_results = [] # To store the results of each configuration
     runs = 5
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     for run in range(0, runs):
 
-        model = ModelIASBase(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
+        model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN, dropout=d).to(device)
         model.apply(init_weights)
 
         optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         'Acc test': [round(accs.mean(), 3)] * len(sampled_epochs)
     })
 
-    csv_filename = f'results/LSTM_baseline/LSTM_baseline_lr_{lr}_bs_{bs}_hid_{hid_size}.csv'
+    csv_filename = f'results/LSTM_drop/LSTM_drop_lr_{lr}_bs_{bs}_hid_{hid_size}_dropout_{d}.csv'
     results_df.to_csv(csv_filename, index=False)
     print(f'CSV file successfully saved in {csv_filename}')
 
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     #plt.show()
 
     # Save ppl_dev plot
-    res_plot_filename = f'results/LSTM_baseline/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+    res_plot_filename = f'results/LSTM_drop/plots/LSTM_res_plot_lr_{lr}_bs_{bs}_hid_{hid_size}_dropout_{d}.png'
     plt.savefig(res_plot_filename)
     print(f"F1 and Accuracy plot saved: '{res_plot_filename}'")
     plt.close()
@@ -185,26 +185,27 @@ if __name__ == "__main__":
     #plt.show()
 
     # Save ppl_dev plot
-    loss_plot_filename = f'results/LSTM_baseline/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}.png'
+    loss_plot_filename = f'results/LSTM_drop/plots/LSTM_loss_plot_lr_{lr}_bs_{bs}_hid_{hid_size}_dropout_{d}.png'
     plt.savefig(loss_plot_filename)
     print(f"Loss plot saved: '{loss_plot_filename}'")
     plt.close()
 
     config_params = {
-                    'Model': 'LSTM baseline', # Explicitly state the model used
+                    'Model': 'LSTM dropout', # Explicitly state the model used
                     'Embedding Size': emb_size,
                     'Hidden Size': hid_size,
                     'Batch Size': bs,
                     'Learning Rate': lr,
-                    #'Dropout': d
+                    'Dropout': d
                 }
 
-    model_filename = f"LSTM_baseline_model.pt"
+    model_filename = f"LSTM_drop_model_f1.pt"
     model_save_path = os.path.join(model_save_dir, model_filename)
     saving_object = {
         "epoch": x,
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
+        "w2id": lang.word2id,
         "slot2id": lang.slot2id,
         "intent2id": lang.intent2id,
         "config": config_params, # Save the config that led to this best score
