@@ -111,7 +111,7 @@ if __name__ == "__main__":
     if TEST:
         print("--- Loading pre-trained model and Evaluating ---")
         # Define path to the saved model
-        model_filename = f"BERT_base_model.pt" # File saved by the training process
+        model_filename = f"BERT_base_model_Acc.pt" # File saved by the training process
         model_save_path = os.path.join(model_save_dir, model_filename)
 
         if not os.path.exists(model_save_path):
@@ -124,6 +124,7 @@ if __name__ == "__main__":
             saving_object = torch.load(model_save_path, map_location=device) 
             loaded_config = saving_object.get('config', {})
             loaded_dropout = loaded_config.get('Dropout', d) # Get dropout used during training, or default
+            loaded_lr = loaded_config.get('Learning Rate', d) # Get dropout used during training, or default
 
             # Instantiate the model with parameters matching the saved model
             model = BertModelIAS(out_slot, out_int, dropout=loaded_dropout).to(device)
@@ -132,7 +133,8 @@ if __name__ == "__main__":
 
             print(f"Model loaded successfully from {model_save_path}")
             print(f"Loaded configuration: {loaded_config}")
-            print(f'Learning rate: {loaded_config.get('Learning Rate', 0.0)}')
+            print(f'Loaded lr: {loaded_lr}')
+            # print(f'Learning rate: {loaded_config.get('Learning Rate', 0.0)}')
 
             # --- Evaluation on Test Set ---
             print("Evaluating loaded model on Test set...")
