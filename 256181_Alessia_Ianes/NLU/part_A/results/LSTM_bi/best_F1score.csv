@@ -1,0 +1,2 @@
+learning rate,batch size,hid_size,F1 score
+0.0003,64,200,0.9493314567206192
