@@ -47,9 +47,9 @@ if __name__ == "__main__":
 
     # Create a directory to save the results, if it doesn't exist
     # os.makedirs('results/LSTM_wt_vd_avsgd/plots', exist_ok=True)
-    models_dir = os.makedirs('bin/LSTM_wt_vd_avsgd', exist_ok=True)
+    models_dir = f'bin/LSTM_wt_vd_avsgd'
+    os.makedirs(models_dir, exist_ok=True)
     model_filename = f'LSTM_wt_vd_avsgd_model.pt'
-    print("prova:", os.path.join(models_dir, model_filename) )
 
    
     # NT-AvSGD parameters

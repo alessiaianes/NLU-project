@@ -45,9 +45,9 @@ if __name__ == "__main__":
 
     # Create a directory to save the results, if it doesn't exist
     # os.makedirs('results/LSTM_dropout_ADAM/plots', exist_ok=True)
-    models_dir = os.makedirs('bin/LSTM_dropout_ADAM', exist_ok=True)
+    models_dir = f'bin/LSTM_dropout_ADAM'
+    os.makedirs(models_dir, exist_ok=True)
     model_filename = f'LSTM_dropout_ADAM_model.pt'
-    print("prova:", os.path.join(models_dir, model_filename) )
 
     # print(f"Training with batch size: {bs} emb size: {emb} hid size: {hid} and lr {lr}")
     # Define the collate function
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     if TEST:
         print("--- Loading pre-trained model and Evaluating ---")
         model = LM_LSTM_dropout(emb, hid, vocab_len, pad_index=lang.word2id["<pad>"]).to(DEVICE)
-        model_path = os.path.join(models_dir, model_filename)
+        model_path = os.path.join(models_dir, model_filename) #'bin/LSTM_dropout_ADAM/LSTM_dropout_ADAM_model.pt' #
 
         if not os.path.exists(model_path):
             print(f"Error: Model file '{model_path}' does not exist. Exiting.")
