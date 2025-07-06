@@ -255,7 +255,7 @@ if __name__ == "__main__":
         print('Intent Acc', round(intent_acc.mean(), 3))
 
        
-        # --- TO SAVE THE MODEL ---
+        # --- UNCOMMENT TO SAVE THE MODEL ---
 
         # config_params = {
         #     'Model': 'BERT-base-uncased', # Explicitly state the model used

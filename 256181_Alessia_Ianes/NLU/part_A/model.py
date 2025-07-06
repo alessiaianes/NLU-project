@@ -72,4 +72,3 @@ class ModelIAS(nn.Module):
         # Slot size: batch_size, classes, seq_len
         return slots, intent
     
-
