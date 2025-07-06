@@ -18,7 +18,7 @@ import pandas as pd  # for DataFrame
 
 # --- Control Variable ---
 # Set to True to load the saved model, False to train and test a new one.
-TEST = True 
+TEST = True
 
 if __name__ == "__main__":
     # First we get the 10% of the training set, then we compute the percentage of these examples 
@@ -47,7 +47,6 @@ if __name__ == "__main__":
     train_raw = X_train
     dev_raw = X_dev
 
-    y_test = [x['intent'] for x in test_raw]
 
 
     words = sum([x['utterance'].split() for x in train_raw], []) # No set() since we want to compute 
@@ -90,47 +89,72 @@ if __name__ == "__main__":
    
     if TEST:
         print("--- Loading pre-trained model and Evaluating ---")
-        model_filename = f"LSTM_drop_model_f1.pt"
+        model_filename = f"LSTM_drop_model_acc.pt"
         model_save_path = os.path.join(model_save_dir, model_filename)
 
         if not os.path.exists(model_save_path):
             print(f"Error: Model file '{model_save_path}' does not exist. Exiting.")
             exit()
 
-    try:
-        # Load the saved object (state_dict, config, mappings)
-        # Ensure loading happens on the correct device ('cpu' if GPU not available/needed)
-        saving_object = torch.load(model_save_path, map_location=device) 
-        loaded_config = saving_object.get('config', {})
-        loaded_dropout = loaded_config.get('Dropout', d) # Get dropout used during training, or default
-        loaded_hid = loaded_config.get('Hidden Size', hid_size) # Get hidden size used during training, or default
+        try:
+            # Load the saved object (state_dict, config, mappings)
+            # Ensure loading happens on the correct device ('cpu' if GPU not available/needed)
+            saving_object = torch.load(model_save_path, map_location=device) 
+            loaded_config = saving_object.get('config', {})
+            loaded_dropout = loaded_config.get('Dropout', d) # Get dropout used during training, or default
+            loaded_hid = loaded_config.get('Hidden Size', hid_size) # Get hidden size used during training, or default
+            loaded_w2id = saving_object.get('w2id', lang.word2id) # Word to ID mapping
+            loaded_slot2id = saving_object.get('slot2id', lang.slot2id) # Slot to ID mapping
+            loaded_intent2id = saving_object.get('intent2id', lang.intent2id) # Intent to ID mapping
 
-        # Instantiate the model with parameters matching the saved model
-        model = ModelIAS(loaded_hid, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN, dropout=loaded_dropout).to(device)
-        model.load_state_dict(saving_object['model'])
-        model.eval() # Set model to evaluation mode (disables dropout)
+            temp_lang = Lang([], [], []) # Inizializzazione base
+            temp_lang.word2id = loaded_w2id
+            temp_lang.slot2id = loaded_slot2id
+            temp_lang.intent2id = loaded_intent2id
+            
+            # Potrebbe essere necessario aggiungere anche le mappature inverse se usate
+            temp_lang.id2word = {v: k for k, v in loaded_w2id.items()}
+            temp_lang.id2slot = {v: k for k, v in loaded_slot2id.items()}
+            temp_lang.id2intent = {v: k for k, v in loaded_intent2id.items()}
 
-        print(f"Model loaded successfully from {model_save_path}")
-        print(f"Loaded configuration: {loaded_config}")
-        # print(f'Learning rate: {loaded_config.get('Learning Rate', 0.0)}')
+            # Gestisci il PAD_TOKEN: assicurati che sia presente nelle mappature caricate
+            # Se PAD_TOKEN non è una parola reale, potresti doverlo aggiungere manualmente
+            # o assicurarti che sia stato aggiunto correttamente durante il salvataggio.
+            # Ad esempio, se il token stringa per PAD è '<PAD>':
+            # if '<PAD>' not in temp_lang.word2id:
+            #    temp_lang.word2id['<PAD>'] = PAD_TOKEN # O l'ID che usi per il padding
 
-        # --- Evaluation on Test Set ---
-        print("Evaluating loaded model on Test set...")
-        
-        # Create DataLoader for the test set
-        # Use batch size from loaded config if available, otherwise default
-        train_batch_size = loaded_config.get('Batch Size', bs) 
-        test_loader = DataLoader(test_dataset, batch_size=train_batch_size//2, collate_fn=collate_fn)
+            # 2. Crea il Dataset di Test usando le mappature CARICATE (tramite temp_lang)
+            #    Assicurati che test_raw sia disponibile qui.
+            test_dataset_eval = IntentsAndSlots(test_raw, temp_lang) 
+            
 
-        # Perform evaluation
-        results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang)
-        
-        print(f'Test Slot F1: {results_test.get("total", {}).get("f", "N/A")}')
-        print(f'Test Intent Accuracy: {intent_test.get("accuracy", "N/A")}')
+            # Instantiate the model with parameters matching the saved model
+            model = ModelIAS(loaded_hid, len(loaded_slot2id), len(loaded_intent2id), emb_size, len(loaded_w2id), pad_index=PAD_TOKEN, dropout=loaded_dropout).to(device)
+            model.load_state_dict(saving_object['model'])
+            model.eval() # Set model to evaluation mode (disables dropout)
 
-    except Exception as e:
-        print(f"Error loading model or during evaluation: {e}")
-        exit()
+            print(f"Model loaded successfully from {model_save_path}")
+            print(f"Loaded configuration: {loaded_config}")
+            # print(f'Learning rate: {loaded_config.get('Learning Rate', 0.0)}')
+
+            # --- Evaluation on Test Set ---
+            print("Evaluating loaded model on Test set...")
+            
+            # Create DataLoader for the test set
+            # Use batch size from loaded config if available, otherwise default
+            train_batch_size = loaded_config.get('Batch Size', bs) 
+            test_loader = DataLoader(test_dataset_eval, batch_size=train_batch_size//2, collate_fn=collate_fn)
+
+            # Perform evaluation
+            results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang)
+            
+            print(f'Test Slot F1: {results_test.get("total", {}).get("f", "N/A")}')
+            print(f'Test Intent Accuracy: {intent_test.get("accuracy", "N/A")}')
+
+        except Exception as e:
+            print(f"Error loading model or during evaluation: {e}")
+            exit()
 
     else:
             # TEST is False, proceed with training and testing
