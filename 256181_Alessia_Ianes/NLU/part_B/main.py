@@ -13,7 +13,7 @@ from functions import *
 
 # --- Control Variable ---
 # Set to True to load the saved model, False to train and test a new one.
-TEST = True 
+TEST = True
 
 
 if __name__ == "__main__":
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     # Define the directory where the model checkpoints will be saved and the filename
     model_save_dir = "bin/BERT_base"
-    model_filename = f"BERT_base_model_Acc.pt"
+    model_filename = f"BERT_base_model_F1.pt"
     os.makedirs(model_save_dir, exist_ok=True)
 
     # Define the loss functions.
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     # --- Hyperparameter Setup ---
     bs = 128 # Batch size to test
     d = 0.2 # Dropout value to test
-    lr = 0.00003 # Learning rate to test
+    lr = 0.00009 # Learning rate to test
     clip = 5 # Gradient clipping value to prevent exploding gradients
     runs = 5 # Number of times to run the training process
     n_epochs = 50 # Maximum number of training epochs
@@ -137,6 +137,7 @@ if __name__ == "__main__":
             # Recreate inverse mappings
             temp_lang.id2slot = {v: k for k, v in loaded_slot2id.items()}
             temp_lang.id2intent = {v: k for k, v in loaded_intent2id.items()}
+            
 
             # Create the test dataset using the loaded vocabulary and tag mappings
             # This ensures consistency between the data processing and the model's learned representations

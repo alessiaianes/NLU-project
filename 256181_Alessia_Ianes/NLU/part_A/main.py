@@ -82,7 +82,7 @@ if __name__ == "__main__":
     # --- Hyperparameter Configuration ---
     hid_size = 200 # Hidden size to test
     emb_size = 300 # Embedding size to test
-    bs = 32 # Batch size to test
+    bs = 64 # Batch size to test
     d = 0.4 # Dropout value to test
     lr = 0.0007 # Learning rate to test
     clip = 5 # Gradient clipping threshold to prevent exploding gradients
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # Define the directory path for saving model checkpoints and the model filename (to test or to save)
     model_save_dir = "bin/LSTM_drop"
     os.makedirs(model_save_dir, exist_ok=True)
-    model_filename = f"LSTM_drop_model_acc.pt"
+    model_filename = f"LSTM_drop_model_f1.pt"
 
     
 
@@ -147,8 +147,6 @@ if __name__ == "__main__":
             model.eval() # Set model to evaluation mode 
 
             print(f"Model loaded successfully from {model_save_path}")
-            print(f"Loaded configuration: {loaded_config}")
-            # print(f'Learning rate: {loaded_config.get('Learning Rate', 0.0)}')
 
             # --- Evaluation on Test Set ---
             print("Evaluating loaded model on Test set...")
