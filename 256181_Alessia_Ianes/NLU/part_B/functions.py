@@ -1,77 +1,101 @@
 import torch
-import torch.nn as nn
-# Pack/Pad sequences might not be needed if using Hugging Face models directly
-# from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence 
-from conll import evaluate # Assuming this library is available and works as expected
+from conll import evaluate
 from sklearn.metrics import classification_report
-from utils import * # Import PAD_TOKEN, device, Lang etc.
+from utils import * 
 
-def init_weights(mat):
-    # Placeholder: BERT model weights are loaded from pretrained, no manual init needed usually
-    pass
-
+# Function to perform one training epoch
 def train_loop(data_loader, optimizer, criterion_slots, criterion_intents, model, clip=5):
-    model.train()
-    total_loss = 0
-    num_batches = 0
-    # Use tqdm for progress bar if available and desired
-    # from tqdm import tqdm
-    # data_loader = tqdm(data_loader, desc="Training") 
+    """
+    Trains the model for one epoch
 
+    Args:
+        data_loader (DataLoader): DataLoader for the training dataset
+        optimizer (Optimizer): PyTorch optimizer instance
+        criterion_slots (nn.CrossEntropyLoss): Loss function for slot tagging
+        criterion_intents (nn.CrossEntropyLoss): Loss function for intent classification
+        model (nn.Module): The neural network model to train
+        clip (float): Gradient clipping value to prevent exploding gradients
+
+    Returns:
+        float: The average training loss over the epoch
+    """
+    model.train() # Set the model to training mode
+    total_loss = 0 # Initialize total loss accumulator
+    num_batches = 0 # Initialize batch counter
+
+    # Iterate over each batch of data provided by the data_loader
     for sample in data_loader:
-        optimizer.zero_grad()
+        optimizer.zero_grad() # Clear previous gradients before computing new ones
         
         # Get attention mask from the sample batch
         attention_mask = sample['attention_mask']
         
-        # Forward pass
+        # --- Forward Pass ---
+        # Pass the utterance (token IDs) and attention mask through the model
+        # The model returns predicted slot logits and intent logits
         slots, intents = model(sample['utterance'], attention_mask)
         
-        # Calculate losses
-        # Ensure targets have the correct shape and dtype
+        # --- Calculate Losses ---
+        # Calculate the intent classification loss using the ground truth intent labels
         loss_intent = criterion_intents(intents, sample['intent'])
         
-        # For CrossEntropyLoss with sequence data (slots):
-        # Model output: (batch_size, num_classes, seq_len) -> permute in model did this
-        # Target: (batch_size, seq_len)
-        # Ensure sample['slots'] is LongTensor and has shape (batch_size, seq_len)
+        # Calculate the slot tagging loss
         loss_slot = criterion_slots(slots, sample['slots'])
-        
+        # Combine the intent and slot losses
         loss = loss_intent + loss_slot
         
         # Backward pass and optimization
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip) # Gradient clipping
-        optimizer.step()
+        loss.backward() # Compute gradients of the loss with respect to model parameters
+        # Clip gradients to prevent them from becoming too large, which helps stabilize training
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        optimizer.step() # Update model parameters using the optimizer
         
+        # Accumulate the loss for this batch
         total_loss += loss.item()
         num_batches += 1
         
-    # Return average loss per batch
+    # Compute and return the average loss per batch for the epoch
     return total_loss / num_batches if num_batches > 0 else 0
 
 
+# This function evaluates the model on a given dataset
 def eval_loop(data_loader, criterion_slots, criterion_intents, model, lang):
-    model.eval()
-    total_loss = 0
-    num_samples = 0 # Count samples processed
+    """
+    Evaluates the model on the provided data loader
+
+    Args:
+        data_loader (DataLoader): DataLoader for the evaluation dataset
+        criterion_slots (nn.CrossEntropyLoss): Loss function for slot tagging
+        criterion_intents (nn.CrossEntropyLoss): Loss function for intent classification
+        model (nn.Module): The neural network model to evaluate
+        lang (Lang): The language object containing mappings (id2intent, id2slot, tokenizer)
+
+    Returns:
+        tuple: A tuple containing:
+            - dict: Slot filling evaluation results (e.g., F1 score from conll.evaluate)
+            - dict: Intent classification evaluation results (e.g., accuracy, precision, recall from classification_report)
+            - float: The average loss over the evaluation dataset
+    """
+    model.eval() # Set the model to evaluation mode
+    total_loss = 0 # Initialize total loss accumulator
     
-    ref_intents = []
-    hyp_intents = []
+    # Lists to store ground truth and predicted intents and slots for evaluation metrics
+    ref_intents = [] # Ground truth intents.
+    hyp_intents = [] # Predicted intents.
     ref_slots = [] # List of lists of (token, slot_tag) tuples for conll format
     hyp_slots = [] # List of lists of (token, slot_tag) tuples for conll format
 
-    # Use tqdm for progress bar if available
-    # data_loader = tqdm(data_loader, desc="Evaluation")
-
+    # Disable gradient calculations during evaluation to save memory and computation
     with torch.no_grad():
+        # Iterate over each batch of data
         for sample in data_loader:
+            # Get the attention mask for the current batch
             attention_mask = sample['attention_mask']
             
-            # Forward pass
+            # Get model predictions
             slots, intents = model(sample['utterance'], attention_mask)
             
-            # Calculate loss (optional, but useful for monitoring)
+            # Compute losses for reference
             loss_intent = criterion_intents(intents, sample['intent'])
             loss_slot = criterion_slots(slots, sample['slots'])
             loss = loss_intent + loss_slot
@@ -87,44 +111,41 @@ def eval_loop(data_loader, criterion_slots, criterion_intents, model, lang):
             out_intents = [lang.id2intent.get(idx, 'UNK') for idx in predicted_intent_ids]
             gt_intents = [lang.id2intent.get(idx, 'UNK') for idx in true_intent_ids]
             
+            # Add the predicted and ground truth intents for this batch to the overall lists
             ref_intents.extend(gt_intents)
             hyp_intents.extend(out_intents)
 
             # --- Slot Evaluation ---
-            # Get predicted slot IDs per token (index of max logit for each token)
+            # Get predicted slot IDs per token 
             # Model output shape is assumed (batch_size, num_slot_classes, seq_len)
             predicted_slot_ids = torch.argmax(slots, dim=1) # Shape: (batch_size, seq_len)
 
             # Process each sequence in the batch
-            for i in range(sample['utterance'].shape[0]): # Iterate through batch dimension
-                # Get the actual length of the sequence (excluding padding)
+            for i in range(sample['utterance'].shape[0]):
+                # Determine the actual length of the sequence by summing the attention mask for the current sample
                 seq_len = int(torch.sum(attention_mask[i])) 
                 
                 if seq_len == 0: continue # Skip empty sequences
 
-                # Get ground truth and predicted slots for this sequence, truncated to seq_len
+                # Get ground truth and predicted slots for this sequence
                 current_gt_slots_ids = sample['slots'][i][:seq_len].tolist()
                 current_pred_slots_ids = predicted_slot_ids[i][:seq_len].tolist()
 
                 # Convert IDs back to slot labels
-                # Use .get() with a default value (e.g., 'O' or PAD_TOKEN mapped label) for safety
+                # Use .get() with a default value for safety
                 gt_slots_labels = [lang.id2slot.get(sid, 'O') for sid in current_gt_slots_ids]
                 pred_slots_labels = [lang.id2slot.get(sid, 'O') for sid in current_pred_slots_ids]
 
-                # Get corresponding BERT tokens for this sequence
+                # Get corresponding BERT tokens IDs for this sequence
                 current_utt_ids = sample['utterance'][i][:seq_len].tolist()
+                # Convert token IDs back to token strings
                 current_tokens = lang.tokenizer.convert_ids_to_tokens(current_utt_ids)
 
-                # Format for conll.evaluate: list of (token, slot_label) tuples
-                # Need to handle potential CLS/SEP tokens if they are included in seq_len calculation
-                
-                # Filter out special tokens if evaluate function doesn't expect them
-                # or adjust indices accordingly. Let's assume evaluate handles standard BIO format.
-                
+                # Prepare lists for the conll evaluation function, which expects (token, slot_label) pairs
                 ref_slots_sequence = []
                 hyp_slots_sequence = []
                 
-                # Iterate through tokens and their corresponding slots
+                # Iterate through tokens and their corresponding slots in the sequence
                 for token_idx in range(seq_len):
                      token = current_tokens[token_idx]
                      gt_slot = gt_slots_labels[token_idx]
@@ -138,10 +159,6 @@ def eval_loop(data_loader, criterion_slots, criterion_intents, model, lang):
                           continue
                           
                      # Add word-slot pair if token is not a special token part like ##
-                     # The conll evaluator usually expects alignment with original words, 
-                     # this token-level alignment might need adjustment based on its expectations.
-                     # If evaluate expects word-level, we'd need to aggregate subword slots.
-                     # Assuming token-level evaluation for now:
                      ref_slots_sequence.append((token, gt_slot))
                      hyp_slots_sequence.append((token, pred_slot))
                 
@@ -149,32 +166,29 @@ def eval_loop(data_loader, criterion_slots, criterion_intents, model, lang):
                 ref_slots.append(ref_slots_sequence)
                 hyp_slots.append(hyp_slots_sequence)
 
-            # Update total loss and count based on batch size
-            # Use batch size for loss averaging if needed, but iterating samples is safer
-            # num_samples += sample['utterance'].shape[0] 
+            
 
     # Calculate average loss over all samples/batches processed
     avg_loss = total_loss / len(data_loader) # Average loss per batch
 
-    # Evaluate slots using conll format
-    results = {"total":{"f":0}} # Default value
+    # Initialize results dictionary with default values
+    results = {"total":{"f":0}}
     try:
         # Ensure ref_slots and hyp_slots are not empty before calling evaluate
         if ref_slots and hyp_slots:
-             results = evaluate(ref_slots, hyp_slots)
+             results = evaluate(ref_slots, hyp_slots) # Compute precision, recall, F1 for slots
         else:
-             print("Warning: No slots data to evaluate.")
+             print("Warning: No slots data to evaluate.") 
     except Exception as ex:
+        # Handle potential errors during evaluation
         print(f"Error during slot evaluation: {ex}")
-        # Fallback: calculate simple accuracy if conll fails
-        # results = {"total":{"f":0}} # Keep default
 
     # Evaluate intents using classification report
-    # Ensure lists are not empty
     if not ref_intents or not hyp_intents:
         print("Warning: No intent data to evaluate.")
         report_intent = {'accuracy': 0} # Default values
     else:
+        # Compute precision, recall, F1-score, and accuracy for intent classification
         report_intent = classification_report(ref_intents, hyp_intents, zero_division=0, output_dict=True)
 
     # Return slot evaluation results (dict), intent evaluation results (dict), average loss

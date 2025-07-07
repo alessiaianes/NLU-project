@@ -1,24 +1,49 @@
+import torch
 import torch.nn as nn
 from transformers import BertModel
 
+# Define the joint Intent and Slot filling model using BERT
 class BertModelIAS(nn.Module):
+    """
+    A PyTorch module that integrates a pre-trained BERT model for joint Intent Classification and Slot Filling
+
+    Args:
+        out_slot (int): The number of possible slot tags (output classes for slot filling)
+        out_int (int): The number of possible intents (output classes for intent classification)
+        dropout (float): The dropout rate to apply after BERT layers. Defaults to 0.1
+    """
     def __init__(self, out_slot, out_int, dropout=0.1):
         super(BertModelIAS, self).__init__()
         # Load the pretrained BERT model
         self.bert = BertModel.from_pretrained('bert-base-uncased')
-        
+        # Initialize a dropout layer for regularization
         self.dropout = nn.Dropout(dropout)
         
-        # Linear layer for slot classification (applied to each token's representation)
+        # Linear layer for slot classification
         # Input size is BERT's hidden size
         self.slot_out = nn.Linear(self.bert.config.hidden_size, out_slot)
         
-        # Linear layer for intent classification (applied to the pooled output, e.g., [CLS] token representation)
+        # Linear layer for intent classification
         self.intent_out = nn.Linear(self.bert.config.hidden_size, out_int)
 
     def forward(self, utterance, attention_mask):
+        """
+        Defines the forward pass of the model
+
+        Args:
+            utterance (torch.Tensor): Input tensor containing token IDs for the utterances
+                                      Shape: (batch_size, sequence_length)
+            attention_mask (torch.Tensor): Tensor indicating which tokens are real (1) and which are padding (0)
+                                           Shape: (batch_size, sequence_length)
+
+        Returns:
+            tuple: A tuple containing:
+                - torch.Tensor: Predicted slot logits for each token. Shape: (batch_size, num_slot_classes, sequence_length)
+                - torch.Tensor: Predicted intent logits for the sequence. Shape: (batch_size, num_intent_classes)
+        """
         # Forward pass through BERT
-        # `outputs` contains last_hidden_state, pooler_output, etc.
+        # `outputs` is a dictionary-like object containing various outputs from BERT,
+        # including hidden states and the pooled output.
         outputs = self.bert(input_ids=utterance, attention_mask=attention_mask)
         
         # Sequence output: Hidden states for each token in the sequence
@@ -42,9 +67,6 @@ class BertModelIAS(nn.Module):
         intent = self.intent_out(pooled_output)
 
         # Permute slots output for CrossEntropyLoss compatibility
-        # Original shape: (batch_size, seq_len, num_slot_classes)
-        # Permuted shape: (batch_size, num_slot_classes, seq_len)
-        # This matches the expected (N, C, L) format for CrossEntropyLoss on sequences.
         slots = slots.permute(0, 2, 1) 
 
         return slots, intent
