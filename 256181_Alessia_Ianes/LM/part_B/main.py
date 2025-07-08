@@ -12,7 +12,9 @@ import os
 import math
 import numpy as np
 
-# Set the TEST flag to True to evaluate a pre-trained model or False to train a new one
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# Set the TEST flag to True to evaluate the saved model, False to train a new one
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 TEST = True
 
 

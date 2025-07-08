@@ -11,8 +11,9 @@ from utils import *
 from model import *
 from functions import *
 
-# --- Control Variable ---
-# Set to True to load the saved model, False to train and test a new one.
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# Set the TEST flag to True to evaluate the saved model, False to train a new one
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 TEST = True
 
 

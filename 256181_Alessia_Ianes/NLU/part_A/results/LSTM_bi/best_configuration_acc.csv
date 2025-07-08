@@ -1,2 +1,0 @@
-Batch Size,Learning Rate,Hid size,F1 score dev,Accuracy dev
-32,0.0001,300,0.9765925925925926,0.9879518072289156

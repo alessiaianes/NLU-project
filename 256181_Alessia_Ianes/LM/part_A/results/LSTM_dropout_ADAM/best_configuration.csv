@@ -1,2 +1,0 @@
-Batch Size,Embedding Size,Hidden Size,Learning Rate,Test PPL
-32,300,200,0.0001,120.57207516363799

@@ -12,8 +12,9 @@ import torch.optim as optim
 import torch.nn as nn
 from tqdm import tqdm
 
-# --- Control Variable ---
-# Set to True to load the saved model, False to train and test a new one
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# Set the TEST flag to True to evaluate the saved model, False to train a new one
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 TEST = True
 
 if __name__ == "__main__":

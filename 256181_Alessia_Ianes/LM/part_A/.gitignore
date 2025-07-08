@@ -1,3 +1,4 @@
 nlu_env_A/
 post_processing.py
 post_processing_dev.py
+bin/

@@ -1,2 +1,0 @@
-learning rate,batch size,hid_size,dropout,Acc
-0.001,32,200,0.4,0.9641657334826428
