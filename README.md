@@ -1,5 +1,7 @@
 # NLU Project: Technical Implementation Report
 
+This project is organized into two main directories: **LM** (Language Modeling) and **NLU** (Natural Language Understanding). Each directory contains two sub-folders corresponding to the two tasks for that part, along with the comprehensive report summarizing the implementation details and key results.
+
 ---
 
 ## Part 1: Language Modeling (LM)
