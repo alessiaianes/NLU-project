@@ -2,6 +2,9 @@
 
 This project is organized into two main directories: **LM** (Language Modeling) and **NLU** (Natural Language Understanding). Each directory contains two sub-folders corresponding to the two tasks for that part, along with the comprehensive report summarizing the implementation details and key results.
 
+For the execution and training of the neural networks, **Azure Virtual Machine** was utilized to leverage high-performance GPU capabilities.
+
+
 ---
 
 ## Part 1: Language Modeling (LM)
